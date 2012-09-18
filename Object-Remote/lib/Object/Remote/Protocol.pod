@@ -1,0 +1,26 @@
+CLIENT: Creates the low-level connection to server.
+
+SERVER: Sends "Shere\n"
+
+# Object::Remote::Connection
+# _send: just prints serialized thingy.
+# send_free: ['free', $id]
+# send_discard: ['NULL', ...]
+# send: [$type, $local-object-id, @call]
+# send_class_call: 'call', 'class_call_handler', $ctx, call, @call]
+# Object::Remote::Connection::send_class_call
+CLIENT: ["call","156751460","class_call_handler",0,"call","Some::Class","new",1,2,3]
+         ^-- this is an ordinary call
+                 ^--- the object-id to call on (nummified reference, but don't rely on that)
+                            ^--- the method being called
+                                                 ^--- wantarray
+                                                          ^--- the rest of these are actually arguments to class_call_handler.
+
+
+# Object::Remote has sub new::on.
+sub new::on {
+    my ($class, $on, @args) = @_;
+    my $conn = __PACKAGE__->connect($on);
+    return $conn->remote_object(class => $class, args => \@args);
+}
+

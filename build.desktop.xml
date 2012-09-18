@@ -1,0 +1,63 @@
+<project name="ObjectRemote" basedir="." default="main">
+
+  <property name="src.dir"     value="src"/>
+<!--  <property name="lib.dir"     value="lib"/> -->
+
+  <property name="build.dir"   value="build"/>
+  <property name="classes.dir" value="${build.dir}/classes"/>
+  <property name="jar.dir"     value="${build.dir}/jar"/>
+  
+  <property name="main-class"  value="uk.me.desert_island.theorbtwo.bridge.StdInOut"/>
+
+  <path id="classpath">
+<!--    <fileset dir="${lib.dir}" includes="**/*.jar"/> -->
+  </path>
+  
+  <target name="clean">
+    <delete dir="${build.dir}"/>
+  </target>
+  
+  <target name="compile-java">
+    <mkdir dir="${classes.dir}"/>
+    <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="true" debuglevel="lines,vars,source" >
+<!--     <compilerarg value="-Xlint:unchecked" /> -->
+    </javac>
+  </target>
+  
+<!--
+  <target name="compile-jasmin">
+    <mkdir dir="${classes.dir}"/>
+    <exec executable="compile-jasmin.sh" failonerror="true">
+      <arg value="-d" />
+      <arg value="${classes.dir}" />
+    </exec>
+  </target>
+-->
+
+  <target name="compile" depends="compile-java">
+  </target>
+
+  <target name="jar" depends="compile">
+    <mkdir dir="${jar.dir}"/>
+    <jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
+      <manifest>
+        <attribute name="Main-Class" value="${main-class}"/>
+      </manifest>
+    </jar>
+  </target>
+  
+  <target name="run" depends="jar">
+    <java classname="${main-class}" fork="true">
+      <!-- <jvmarg value="-verbose:class" /> -->
+      <classpath>
+        <path refid="classpath" />
+        <path location="${jar.dir}/${ant.project.name}.jar" />
+      </classpath>
+    </java>
+  </target>
+  
+  <target name="clean-build" depends="clean,jar"/>
+  
+  <target name="main" depends="clean,run"/>
+  
+</project>

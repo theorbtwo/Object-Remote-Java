@@ -4,7 +4,7 @@ import uk.me.desert_island.theorbtwo.bridge.Core;
 import java.net.*;
 import java.io.*;
 
-public class NormalTCP {
+public class TcpIpConnection {
     public static void main(String[] args)
         throws java.io.IOException, org.json.JSONException
     {

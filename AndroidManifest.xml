@@ -11,7 +11,7 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-    <service android:name="AndroidService"
+    <service android:name="JavaBridgeService"
              android:label="@string/service_name">
     </service>
   </application>

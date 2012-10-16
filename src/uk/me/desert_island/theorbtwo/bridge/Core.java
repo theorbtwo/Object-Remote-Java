@@ -14,14 +14,13 @@ import java.util.ArrayList;
 
 public class Core {
     private static HashMap<String, Object> known_objects = new HashMap<String, Object>();
-
-    private static Object handle_call(JSONArray incoming) 
+    
+    private static Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
     {
         //  0      1          2                    3 4      5                                          6     7
         // ["call","31247544","class_call_handler",0,"call","Object::Remote::Java::java::lang::System","can","getProperties"]
         String call_type = incoming.getString(2);
-        PrintStream err = System.err;
         
         if (call_type.equals("class_call_handler")) {
             // wantarray may be undef/0/1, so call it an Object, not an int or a string.
@@ -35,58 +34,106 @@ public class Core {
                     String perl_wanted_method = incoming.getString(7);
                     Class<?> klass = my_find_class(perl_class);
                     if (has_any_methods(klass, perl_wanted_method)) {
-                        err.printf("Need to return true for %s->can('%s')\n", perl_class, perl_wanted_method);
+                        err.print("Need to return true for " + perl_class + "->can('" + perl_wanted_method +"')\n");
                         return (new CanResult(klass, perl_wanted_method));
                     } else {
-                        err.printf("Need to return false for %s->can('%s')\n", perl_class, perl_wanted_method);
+                        err.print("Need to return false for " + perl_class + "->can('" + perl_wanted_method+"')\n");
                     }
                     
                     
                 } else {
-                    err.printf("class call for %s->%s\n", perl_class, perl_method);
+                    err.print("class call for " + perl_class +"->" + perl_method +"\n");
                 }
             } else {
                 err.print("Huh?\n");
-                err.printf("call_type_again: '%s'\n", call_type_again);
+                err.print("call_type_again: '" + call_type_again +"'\n");
             }
         } else if (known_objects.containsKey(call_type)) {
             // A normal method call.
             Object obj = known_objects.get(call_type);
             String do_what = incoming.getString(4);
             if (do_what.equals("call") && obj instanceof CanResult) {
+                // >>> ["call","139214384","class_call_handler",0,"call","uk::me::desert_island::theorbtwo::bridge::AndroidServiceStash","can","get_service"]
+                // <<< ["call_free","NULL","139214384","done",{"__remote_code__":"uk.me.desert_island.theorbtwo.bridge.CanResult:410c7850"}]
+                // >>> ["call","139097736","uk.me.desert_island.theorbtwo.bridge.CanResult:410c7850","","call"]
+                // <<< ["call_free","NULL","139097736","done",{"__remote_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b83f0"}]
+
+                //  0       1          2                                                         3  4      5                        6                                 7               8
+                // ["call","139214400","uk.me.desert_island.theorbtwo.bridge.CanResult:410d8508","","call","android::widget::Toast",{"__remote_object__":"139315920"},"toast content",0]
+                // ["call","139175944","uk.me.desert_island.theorbtwo.bridge.CanResult:410d9db8","","call","android::widget::Toast",{"__remote_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b9d40"},"toast content",0]
+                // ["call","139178632","uk.me.desert_island.theorbtwo.bridge.CanResult:41093298","","call","android::widget::Toast",{"__local_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b0f88"},"toast content",0]
+
+
                 // A call to a coderef (a CanResult from ->can::on, most likely).
                 // Object wantarray = incoming.getString(3);
                 CanResult canresult = (CanResult)obj;
-                if (incoming.length() != 5) {
-                    throw(new Exception("calls with arguments not yet supported"));
+                //if (incoming.length() != 5) {
+                //    throw(new Exception("calls with arguments not yet supported"));
+                //}
+                Class method_class = canresult.klass();
+                String method_name = canresult.method_name();
+
+                Boolean static_call;
+                Object invocant = null;
+                ArrayList<Object> args = new ArrayList<Object>();
+                ArrayList<Class> arg_types = new ArrayList<Class>();
+
+                if(incoming.length() > 5) {
+                    if (incoming.get(5) instanceof String) {
+                        // FIXME: how do we tell the difference between a static method call and a call that happens to be on a string?
+                        static_call = true;
+                        invocant = null;
+                    } else {
+                        static_call = false;
+                        // JSONArray containing JSONObject with key "__local_object__", which contains the id of an object we fetched earlier (probably)
+                        invocant = known_objects.get(incoming.getJSONObject(5).get("__local_object__"));
+                        if(invocant == null) {
+                            err.print("Can't find invocant object from:" + incoming.get(5));
+                        }
+                    }
+                    
+                    for (int i = 6; i < incoming.length(); i++) {
+                        Object json_arg = incoming.get(i);
+                        if(json_arg instanceof JSONObject) {
+                            // FIXME: Doesn't handle __remote_code__ yet.. 
+                            json_arg = known_objects.get(((JSONObject) json_arg).get("__local_object__"));
+                        }
+                        // if(known_objects.containsKey((String)json_arg)) {
+                        //    json_arg = known_objects.get((String)json_arg);
+                        // }
+                        args.add(json_arg);
+                        arg_types.add(json_arg.getClass());
+                    }
                 }
-                Class<?>[] arg_types = new Class<?>[0];
-                Method meth = my_find_method(canresult.klass(), canresult.method_name(), arg_types);
-                return meth.invoke(null);
+                
+                Method meth = my_find_method(method_class, method_name, arg_types.toArray(new Class<?>[0]));
+                return meth.invoke(invocant, args.toArray());
                 
             } else {
                 // Really, just a normal method call.
                 //  0      1          2                              3   4             5
                 // ["call","24740200","java.util.Properties:b4aa453","1","getProperty","java.class.path"]
+                // ["call","139255176","android.hardware.Sensor:410d9670","","getMaximumRange"]
                 ArrayList<Object> args = new ArrayList<Object>();
                 ArrayList<Class> arg_types = new ArrayList<Class>();
                 for (int i = 5; i < incoming.length(); i++) {
                     Object json_arg = incoming.get(i);
                     args.add(json_arg);
                     arg_types.add(json_arg.getClass());
-                    Method meth = my_find_method(obj.getClass(), do_what, arg_types.toArray(new Class<?>[0]));
-                    return meth.invoke(obj, args.toArray());
                 }
+
+                Method meth = my_find_method(obj.getClass(), do_what, arg_types.toArray(new Class<?>[0]));
+                return meth.invoke(obj, args.toArray());
                 
             }
         } else {
-            err.printf("Huh, unknown call_type %s\n", call_type);
+            err.print("Huh, unknown call_type " + call_type +"\n");
         }
 
         return null;        
     }
     
-    public static void handle_line(StringBuilder in_line, PrintStream out, PrintStream err) 
+    public static void handle_line(StringBuilder in_line, PrintStream out, PrintyThing err) 
         throws JSONException, Exception
     {
         JSONArray incoming = new JSONArray(in_line.toString());
@@ -95,13 +142,13 @@ public class Core {
         
         Object retval = null;
         
-        // err.printf("command_string = '%s', rest_string = '%s'\n", command_string, rest_string);
+        err.print("command_string = "+command+"', future_objid = '"+future_objid+"'\n");
         
         if (command.equals("call")) {
-            retval = handle_call(incoming);
+            retval = handle_call(incoming, err);
         } else {
             err.print("Huh?\n");
-            err.printf("command: '%s'\n", command);
+            err.print("command: "+ command + "\n");
         }
 
         JSONArray json_out = new JSONArray();
@@ -110,15 +157,27 @@ public class Core {
         json_out.put(future_objid);
         json_out.put("done");
 
-        if (retval instanceof CanResult) {
+        err.print("Return (toString): " + retval + "\n");
+        err.print("Return (class):    " + retval.getClass().toString() + "\n");
+
+        if (retval == null) {
+            json_out.put(JSONObject.NULL);
+        } else if (retval instanceof CanResult) {
             JSONObject return_json = new JSONObject();
             String ret_objid = obj_ident(retval);
             known_objects.put(ret_objid, retval);
             return_json.put("__remote_code__", ret_objid);
             json_out.put(return_json);
-        } else if (retval.getClass() == String.class) {
-            // If the return is a string (not a subclass of java.lang.String)
+        
+        } // For the wrapped basic types, we want the specific JSONObject.put for that basic type.
+        else if (retval.getClass() == String.class) {
             json_out.put((String)retval);
+        } else if (retval.getClass() == Float.class) {
+            json_out.put(((Float)retval).doubleValue());
+        } else if (retval.getClass() == Double.class) {
+            json_out.put(((Double)retval).doubleValue());
+        } else if (retval.getClass() == Integer.class) {
+            json_out.put(((Integer)retval).intValue());
         } else {
             // FIXME: Quite possibly we shouldn't return all of these as objects, but rather as plain strings or numbers.
             JSONObject return_json = new JSONObject();
@@ -155,7 +214,7 @@ public class Core {
             out.printf("%s DESTROYed\n", command_id);
             
         } else if (command_string.equals("SHUTDOWN")) {
-            err.printf("Got SHUTDOWN, shutting down.\n");
+            err.print("Got SHUTDOWN, shutting down.\n");
             
             if (!known_objects.isEmpty()) {
                 for (String key : known_objects.keySet()) {

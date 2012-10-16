@@ -1,6 +1,7 @@
 package uk.me.desert_island.theorbtwo.bridge;
 
-import uk.me.desert_island.theorbtwo.bridge.Core;
+//import uk.me.desert_island.theorbtwo.bridge.Core;
+//import .PrintyThingNormal;
 
 public class StdInOut {
   public static void main(String[] args)
@@ -25,7 +26,11 @@ public class StdInOut {
         // newline.
         //System.err.printf("Got a line: '%s'\n", in_line);
 
-        Core.handle_line(in_line, System.out, System.err);
+        try {
+            Core.handle_line(in_line, System.out, new PrintyThingNormal(System.err));
+        } catch(Exception e) {
+            System.err.println("handle_line failed" + e);
+        }
 
         in_line = new StringBuilder();
       } else if (c == -1) {

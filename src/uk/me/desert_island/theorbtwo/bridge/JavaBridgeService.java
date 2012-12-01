@@ -26,6 +26,7 @@ public class JavaBridgeService extends IntentService {
     public JavaBridgeService() {
         super("JavaBridgeService");
         AndroidServiceStash.set_service(this);
+        //        AndroidServiceStash.set_activity(new Activity());
     }
 
     @Override
@@ -40,7 +41,7 @@ public class JavaBridgeService extends IntentService {
       InetAddress bind_address;
       try {
           //          bind_address = InetAddress.getLocalHost();
-          bind_address = InetAddress.getByName("0.0.0.0");
+          bind_address = Inet4Address.getByName("0.0.0.0");
       } catch (UnknownHostException e) {
           Log.e(LOGTAG, "Failed to find InetAddress 0.0.0.0");
           return;

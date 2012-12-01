@@ -19,7 +19,7 @@
   
   <target name="compile-java">
     <mkdir dir="${classes.dir}"/>
-    <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="true" debuglevel="lines,vars,source" >
+    <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="true" debuglevel="lines,vars,source" excludesfile="android-only.lst">
 <!--     <compilerarg value="-Xlint:unchecked" /> -->
     </javac>
   </target>

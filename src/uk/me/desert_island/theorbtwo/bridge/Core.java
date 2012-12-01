@@ -5,12 +5,15 @@ import java.io.IOException;
 import java.lang.Class;
 import java.util.HashMap;
 import java.lang.reflect.Method;
+import java.lang.reflect.Constructor;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
 import java.util.ArrayList;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 
 public class Core {
     private static HashMap<String, Object> known_objects = new HashMap<String, Object>();
@@ -38,9 +41,21 @@ public class Core {
                         return (new CanResult(klass, perl_wanted_method));
                     } else {
                         err.print("Need to return false for " + perl_class + "->can('" + perl_wanted_method+"')\n");
+                        return null;
                     }
                     
-                    
+                } else if (perl_method.equals("new")) {
+                    // Right.  This is a constructor, which in Java isn't a method call, but a special unique flower.
+                    //  0      1           2                    3 4      5                           6     7
+                    // ["call","136826936","class_call_handler",0,"call","android::widget::EditText","new",{"__local_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410a5a10"}]
+                    Class<?> klass = my_find_class(perl_class);
+                    err.print("Calling 'new' on .. " + klass.getName());
+                    ArrayList<Object> args = new ArrayList<Object>();
+                    ArrayList<Class> arg_types = new ArrayList<Class>();
+                    // magic number 7 = start extracting args at this index
+                    convert_json_args_to_java(incoming, 7, arg_types, args, err);
+                    Constructor con = my_find_constructor(klass, arg_types.toArray(new Class<?>[0]));
+                    return con.newInstance(args.toArray());
                 } else {
                     err.print("class call for " + perl_class +"->" + perl_method +"\n");
                 }
@@ -90,21 +105,11 @@ public class Core {
                         if(invocant == null) {
                             err.print("Can't find invocant object from:" + incoming.get(5));
                         }
-                    }
-                    
-                    for (int i = 6; i < incoming.length(); i++) {
-                        Object json_arg = incoming.get(i);
-                        if(json_arg instanceof JSONObject) {
-                            // FIXME: Doesn't handle __remote_code__ yet.. 
-                            json_arg = known_objects.get(((JSONObject) json_arg).get("__local_object__"));
-                        }
-                        // if(known_objects.containsKey((String)json_arg)) {
-                        //    json_arg = known_objects.get((String)json_arg);
-                        // }
-                        args.add(json_arg);
-                        arg_types.add(json_arg.getClass());
-                    }
+                    }                
                 }
+
+                // magic number 6 = start extracting args at this index
+                convert_json_args_to_java(incoming, 6, arg_types, args, err);
                 
                 Method meth = my_find_method(method_class, method_name, arg_types.toArray(new Class<?>[0]));
                 return meth.invoke(invocant, args.toArray());
@@ -116,11 +121,8 @@ public class Core {
                 // ["call","139255176","android.hardware.Sensor:410d9670","","getMaximumRange"]
                 ArrayList<Object> args = new ArrayList<Object>();
                 ArrayList<Class> arg_types = new ArrayList<Class>();
-                for (int i = 5; i < incoming.length(); i++) {
-                    Object json_arg = incoming.get(i);
-                    args.add(json_arg);
-                    arg_types.add(json_arg.getClass());
-                }
+                // magic number 5 = start extracting args at this index
+                convert_json_args_to_java(incoming, 5, arg_types, args, err);
 
                 Method meth = my_find_method(obj.getClass(), do_what, arg_types.toArray(new Class<?>[0]));
                 return meth.invoke(obj, args.toArray());
@@ -140,25 +142,47 @@ public class Core {
         String command = incoming.getString(0);
         String future_objid = incoming.getString(1);
         
-        Object retval = null;
+        Object retval;
+        Boolean is_fail;
         
-        err.print("command_string = "+command+"', future_objid = '"+future_objid+"'\n");
+        err.print("command_string = '"+command+"', future_objid = '"+future_objid+"'\n");
         
         if (command.equals("call")) {
-            retval = handle_call(incoming, err);
+            try {
+                retval = handle_call(incoming, err);
+                is_fail = false;
+            } catch (Exception e) {
+                is_fail = true;
+                // Good god, but this is ugly.
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                // FIXME: Framework (O::R) should do this?
+                e.printStackTrace();
+                e.printStackTrace(new PrintStream(baos));
+                retval = e.toString() + " message " + e.getMessage() + " stack trace: " + baos.toString();
+            }
         } else {
             err.print("Huh?\n");
             err.print("command: "+ command + "\n");
+            throw(new Exception("Protocol error?"));
         }
 
         JSONArray json_out = new JSONArray();
         json_out.put("call_free");
         json_out.put("NULL");
         json_out.put(future_objid);
-        json_out.put("done");
+        if (is_fail) {
+            json_out.put("fail");
+        } else {
+            json_out.put("done");
+        }
 
-        err.print("Return (toString): " + retval + "\n");
-        err.print("Return (class):    " + retval.getClass().toString() + "\n");
+        if (retval == null) {
+            err.print("Return is null\n");
+        } else {
+            err.print("Return (toString): " + retval + "\n");
+            err.print("Return (class):    " + retval.getClass().toString() + "\n");
+        }
 
         if (retval == null) {
             json_out.put(JSONObject.NULL);
@@ -182,6 +206,7 @@ public class Core {
             // FIXME: Quite possibly we shouldn't return all of these as objects, but rather as plain strings or numbers.
             JSONObject return_json = new JSONObject();
             String ret_objid = obj_ident(retval);
+            err.print("Store object: " + ret_objid);
             known_objects.put(ret_objid, retval);
             return_json.put("__remote_object__", ret_objid);
             json_out.put(return_json);
@@ -189,180 +214,26 @@ public class Core {
             
         out.println(json_out.toString());
         
-        /*        if (command_string.equals("create")) {
-            java.lang.Class klass;
-            java.lang.Object obj;
-            
-            try {
-                klass = Class.forName(split[2]);
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            try {
-                obj = klass.newInstance();
-                known_objects.put(obj_ident(obj), obj);
-                out.printf("%s %s\n", command_id, obj_ident(obj));
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s", command_id, e.toString());
-                return;
-            }
-            
-        } else if (command_string.equals("DESTROY")) {
-            known_objects.remove(split[2]);
-            out.printf("%s DESTROYed\n", command_id);
-            
-        } else if (command_string.equals("SHUTDOWN")) {
-            err.print("Got SHUTDOWN, shutting down.\n");
-            
-            if (!known_objects.isEmpty()) {
-                for (String key : known_objects.keySet()) {
-                    out.printf("Leaked %s: %s\n", key, known_objects.get(key));
-                }
-            }
-            
-            out.printf("%s SHUTDOWN\n", command_id);
-            
-            System.exit(3);
-            
-        } else if (command_string.equals("call_method")) {
-            String obj_ident   = split[2];
-            String method_name = split[3];
-            Object obj;
-            Method meth;
-            Object ret;
-            
-            Class<?>[] argument_classes = new Class<?>[split.length - 4];
-            Object[] arguments = new Object[split.length - 4];
-            
-            // err.printf("call_method, obj_ident='%s', method_name='%s'\n", obj_ident, method_name);
-            
-            obj = known_objects.get(obj_ident);
-            
-            for (int i = 4; i < split.length; i++) {
-                arguments[i-4] = known_objects.get(split[i]);
-                argument_classes[i-4] = arguments[i-4].getClass();
-            }
-            
-            try {
-                meth = my_find_method(obj.getClass(), method_name, argument_classes);
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            try {
-                ret = meth.invoke(obj, arguments);
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            out.printf("%s call_method return: %s\n", command_id, obj_ident(ret));
-            known_objects.put(obj_ident(ret), ret);
-            
-        } else if (command_string.equals("call_static_method")) {
-            Class<?> klass;
-            Object ret;
-            
-            Class<?>[] argument_classes = new Class<?>[split.length - 4];
-            Object[] arguments = new Object[split.length - 4];
-            
-            for (int i = 4; i < split.length; i++) {
-                arguments[i-4] = known_objects.get(split[i]);
-                argument_classes[i-4] = arguments[i-4].getClass();
-            }
-            
-            try {
-                klass = Class.forName(split[2]);
-                ret = my_find_method(klass, split[3], argument_classes).invoke(null, arguments);
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            out.printf("%s call_static_method return: %s\n", command_id, obj_ident(ret));
-            known_objects.put(obj_ident(ret), ret);
-            
-        } else if (command_string.equals("fetch_static_field")) {
-            Class klass;
-            Object ret;
-            
-            try {
-                klass = Class.forName(split[2]);
-                ret = klass.getField(split[3]).get(null);
-            } catch (java.lang.Throwable e) {
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            out.printf("%s call_static_method return: %s\n", command_id, obj_ident(ret));
-            known_objects.put(obj_ident(ret), ret);
-            
-        } else if (command_string.equals("fetch_field")) {
-            Object obj;
-            Object ret;
-            
-            //  0 1           2                                   3
-            //  7 fetch_field [Ljava.lang.reflect.Method;>1b67f74 length
-            try {
-                obj = known_objects.get(split[2]);
-                System.err.printf("fetch_field on %s for %s\n", obj.getClass().toString(), split[3]);
-                System.err.printf("isArray? %s\n", obj.getClass().isArray());
-                ret = obj.getClass().getField(split[3]).get(obj);
-            } catch (java.lang.Throwable e) {
-                e.printStackTrace();
-                out.printf("%s thrown: %s\n", command_id, e.toString());
-                return;
-            }
-            
-            out.printf("%s call_static_method return: %s\n", command_id, obj_ident(ret));
-            known_objects.put(obj_ident(ret), ret);
-            
-        } else if (command_string.equals("get_array_length")) {
-            // fixme: why does fetch_field of an array not work?
-            
-            Object obj;
-            obj = known_objects.get(split[2]);
-            System.out.printf("%s num return: %d\n", command_id, java.lang.reflect.Array.getLength(obj));
-            
-        } else if (command_string.equals("fetch_array_element")) {
-            Object obj[];
-            Integer index;
-            Object ret;
-            
-            obj = (Object[]) known_objects.get(split[2]);
-            index = Integer.decode(split[3]);
-            ret = obj[index];
-            
-            out.printf("%s call_static_method return: %s\n", command_id, obj_ident(ret));
-            known_objects.put(obj_ident(ret), ret);
-            
-            
-        } else if (command_string.equals("dump_string")) {
-            Object obj = known_objects.get(split[2]);
-            String out_string = (String)obj;
-            Pattern backslash_pattern = Pattern.compile("\\\\");
-            Pattern newline_pattern = Pattern.compile("\n");
-            
-            out_string = backslash_pattern.matcher(out_string).replaceAll("\\\\");
-            out_string = newline_pattern.matcher(out_string).replaceAll("\\n");
-            
-            out.printf("%s dump_string: '%s'\n", command_id, out_string);
-            
-        } else if (command_string.equals("make_string")) {
-            String the_string = split[2];
-            
-            the_string = Pattern.compile("\\x20").matcher(the_string).replaceAll(" ");
-            the_string = Pattern.compile("\\n").matcher(the_string).replaceAll("\n");
-            the_string = Pattern.compile("\\\\").matcher(the_string).replaceAll("\\\\");
-            
-            known_objects.put(obj_ident(the_string), the_string);
-            out.printf("%s %s\n", command_id, obj_ident(the_string));
-            
-        */
     }
+
+    private static void convert_json_args_to_java
+        (JSONArray incoming, int start_index, ArrayList<Class> arg_types, ArrayList<Object> args, PrintyThing err) throws JSONException {
+        for (int i = start_index; i < incoming.length(); i++) {
+            Object json_arg = incoming.get(i);
+            err.print("JSON arg: " + json_arg.toString());
+            if(json_arg instanceof JSONObject) {
+                // FIXME: Doesn't handle __remote_code__ yet.. 
+                err.print("Looking for known obj: " + ((JSONObject) json_arg).get("__local_object__"));
+                json_arg = known_objects.get(((JSONObject) json_arg).get("__local_object__"));
+            }
+            // if(known_objects.containsKey((String)json_arg)) {
+            //    json_arg = known_objects.get((String)json_arg);
+            // }
+            args.add(json_arg);
+            arg_types.add(json_arg.getClass());
+        }
+    }
+
     
     private static Class<?> my_find_class(String perl_name) {
         String java_name;
@@ -393,6 +264,120 @@ public class Core {
         return false;
     }
 
+    private static boolean compare_method_args(Class<?>[] args, Class<?>[] m_args)
+    {
+        boolean found=true;
+        
+        for (int i=0; i<args.length; i++) {
+            
+            String wanted_name = args[i].getName();
+            String got_name = m_args[i].getName();
+            
+            // Java Language Specification, 3rd edition, 5.3 -- method arguments can have...
+            // • an identity conversion (§5.1.1)
+            if (args[i].equals(m_args[i])) {
+                continue;
+            }
+            
+            // • a widening primitive conversion (§5.1.2)
+            // (Not applicable; our arguments will always be boxed types.)
+            
+            // • a widening reference conversion (§5.1.5)
+            if (m_args[i].isAssignableFrom(args[i])) {
+                System.err.printf("%s vs %s is OK (isAssignableFrom / a widening reference conversion\n",
+                                  wanted_name, got_name
+                                  );
+                continue;
+            }
+            
+            // • a boxing conversion (§5.1.7) optionally followed by widening reference conversion
+            // • an unboxing conversion (§5.1.8) optionally followed by a widening primitive conversion.
+            
+            // Java Language Specification, 3rd edition, 5.1.8
+            if (wanted_name.equals("java.lang.Boolean") && got_name.equals("boolean")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Byte") && got_name.equals("byte")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Character") && got_name.equals("char")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Short") && got_name.equals("short")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Long") && got_name.equals("long")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Float") && got_name.equals("float")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Double") && got_name.equals("double")) {
+                continue;
+            }
+            
+            if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
+                continue;
+            }
+            System.err.printf("Argument mismatch on wanted_name='%s' vs got_name='%s'\n", wanted_name, got_name);
+            found = false;
+            break;
+        }
+
+        return found;
+    }
+    
+    private static Constructor my_find_constructor(Class<?> klass, Class<?>[] args)
+        throws SecurityException, NoSuchMethodException
+    {
+        System.err.printf("my_find_constructor, class = ", klass.getName(), ", args = ...");
+        for (Class<?> arg_k : args) {
+            System.err.printf("\n arg: "+arg_k.getName());
+        }
+        try {
+            Constructor c;
+            System.err.printf("Trying to find an obvious constructor\n");
+            c = klass.getConstructor(args);
+            System.err.printf("Still here after getConstructor() call\n");
+            return c;
+        } catch (NoSuchMethodException e) {
+            // Do nothing (just don't return).
+        }
+
+        System.err.printf("Trying non-obvious matches\n");
+        // We do not have a perfect match; try for a match where the
+        // method has primitive types but args has corresponding boxed types.
+        for (Constructor c : klass.getConstructors()) {
+            Class<?>[] c_args;
+
+            c_args = c.getParameterTypes();
+
+            if (c_args.length != args.length) {
+                continue;
+            }
+
+            System.err.printf("We have a strong candidate %s\n", c.toString());
+
+            if (compare_method_args(args, c_args)) {
+                System.err.printf("We got it: %s\n", c.toString());
+                return c;
+            }
+        }
+
+        throw new NoSuchMethodException();
+
+    }
+    
     private static Method my_find_method(Class<?> klass, String name, Class<?>[] args) 
         throws SecurityException, NoSuchMethodException
     {
@@ -411,7 +396,6 @@ public class Core {
         // We do not have a perfect match; try for a match where the
         // method has primitive types but args has corresponding boxed types.
         for (Method m : klass.getMethods()) {
-            boolean args_match = true;
             Class<?>[] m_args;
 
             if (!m.getName().equals(name)) {
@@ -426,74 +410,7 @@ public class Core {
 
             System.err.printf("We have a strong canidate %s\n", m.toString());
 
-            for (int i=0; i<args.length; i++) {
-        
-                String wanted_name = args[i].getName();
-                String got_name = m_args[i].getName();
-
-                // Java Language Specification, 3rd edition, 5.3 -- method arguments can have...
-                // • an identity conversion (§5.1.1)
-                if (args[i].equals(m_args[i])) {
-                    continue;
-                }
-
-                // • a widening primitive conversion (§5.1.2)
-                // (Not applicable; our arguments will always be boxed types.)
-
-                // • a widening reference conversion (§5.1.5)
-                if (m_args[i].isAssignableFrom(args[i])) {
-                    System.err.printf("%s vs %s is OK (isAssignableFrom / a widening reference conversion\n",
-                                      wanted_name, got_name
-                                      );
-                    continue;
-                }
-
-                // • a boxing conversion (§5.1.7) optionally followed by widening reference conversion
-                // • an unboxing conversion (§5.1.8) optionally followed by a widening primitive conversion.
-
-                // Java Language Specification, 3rd edition, 5.1.8
-                if (wanted_name.equals("java.lang.Boolean") && got_name.equals("boolean")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Byte") && got_name.equals("byte")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Character") && got_name.equals("char")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Short") && got_name.equals("short")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Long") && got_name.equals("long")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Float") && got_name.equals("float")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Double") && got_name.equals("double")) {
-                    continue;
-                }
-        
-                if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
-                    continue;
-                }
-        
-                System.err.printf("Argument mismatch on wanted_name='%s' vs got_name='%s'\n", wanted_name, got_name);
-                args_match = false;
-                break;
-            }
-
-            if (args_match) {
+            if (compare_method_args(args, m_args)) {
                 System.err.printf("We got it: %s\n", m.toString());
                 return m;
             }
@@ -501,6 +418,8 @@ public class Core {
 
         throw new NoSuchMethodException();
     }
+
+
 
     private static String obj_ident(java.lang.Object obj) {
         StringBuilder ret = new StringBuilder();

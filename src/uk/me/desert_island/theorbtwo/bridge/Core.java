@@ -151,10 +151,14 @@ public class Core {
             try {
                 retval = handle_call(incoming, err);
                 is_fail = false;
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 is_fail = true;
                 // Good god, but this is ugly.
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                if (e instanceof java.lang.reflect.InvocationTargetException) {
+                    e = e.getCause();
+                }
 
                 // FIXME: Framework (O::R) should do this?
                 e.printStackTrace();

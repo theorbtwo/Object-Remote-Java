@@ -74,19 +74,6 @@ public class JavaBridgeService extends IntentService {
       //      return START_STICKY;
     }
     
-    // I really don't understand this binder stuff.  This is taken directly from http://developer.android.com/reference/android/app/Service.html#LocalServiceSample
-    /**
-     * Class for clients to access.  Because we know this service always
-     * runs in the same process as its clients, we don't need to deal with
-     * IPC.
-     */
-    public class LocalBinder extends Binder {
-        JavaBridgeService getService() {
-            return JavaBridgeService.this;
-        }
-    }
-
-
     // This is the object that receives interactions from clients.  See
     // RemoteService for a more complete example.
     static final int MSG_SETUP = 1;
@@ -121,7 +108,6 @@ public class JavaBridgeService extends IntentService {
 
     final Messenger serviceMessenger = new Messenger(new IncomingHandler());
     Messenger activityMessenger;
-    //    private final IBinder mBinder = new LocalBinder();
 
     @Override
     public IBinder onBind (Intent intent) {

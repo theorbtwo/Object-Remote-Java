@@ -17,7 +17,19 @@ import java.io.PrintStream;
 
 public class Core {
     private static HashMap<String, Object> known_objects = new HashMap<String, Object>();
-    
+
+    /*
+    class JavaBridgeHelper {
+        JavaBridgeHelper(Object obj, String method, Class<?>[] args) {
+            return new Runnable() {
+                public void run() {
+                    Method meth = my_find_method(obj.getClass(), method, args);
+                    return meth.invoke(obj, args.toArray());
+                }
+            };
+        }
+    }
+    */
     private static Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
     {
@@ -132,7 +144,7 @@ public class Core {
             err.print("Huh, unknown call_type " + call_type +"\n");
         }
 
-        return null;        
+        return null;
     }
     
     public static void handle_line(StringBuilder in_line, PrintStream out, PrintyThing err) 
@@ -220,26 +232,49 @@ public class Core {
         
     }
 
+    private static void run_remote_code(String id) {
+        System.err.println("Trying to run remote code "+id);
+        
+    }
+
     private static void convert_json_args_to_java
         (JSONArray incoming, int start_index, ArrayList<Class> arg_types, ArrayList<Object> args, PrintyThing err) throws JSONException {
         for (int i = start_index; i < incoming.length(); i++) {
             Object json_arg = incoming.get(i);
             err.print("JSON arg: " + json_arg.toString());
-            if(json_arg instanceof JSONObject) {
-                // FIXME: Doesn't handle __remote_code__ yet.. 
-                err.print("Looking for known obj: " + ((JSONObject) json_arg).get("__local_object__"));
-                json_arg = known_objects.get(((JSONObject) json_arg).get("__local_object__"));
+            if (json_arg instanceof JSONArray) {
+                ArrayList<Object> inner_args = new ArrayList<Object>();
+                ArrayList<Class>  inner_arg_types = new ArrayList<Class>(); 
+                convert_json_args_to_java((JSONArray)json_arg, 0, inner_arg_types, inner_args, err);
+                // This makes json_arg always be an array of object.  If this ends up being a problem, we'll have to find the least-restrictive class that is a superclass of all the elements?
+                json_arg = inner_args.toArray();
+            } else if (json_arg instanceof JSONObject) {
+                JSONObject json_arg_obj = (JSONObject) json_arg;
+                if (json_arg_obj.has("__local_object__")) {
+                    err.print("Looking for known obj: " + json_arg_obj.get("__local_object__"));
+                    json_arg = known_objects.get(json_arg_obj.get("__local_object__"));
+                } else if (json_arg_obj.has("__remote_code__")) {
+                    // this just contains the id of a coderef on the remote side, which we could then ask it to run..
+
+                    final String code_id = (String)json_arg_obj.get("__remote_code__");
+                    //final Core the_core = this;
+                    json_arg = new Runnable() {
+                            public void run() {
+                                run_remote_code(code_id);
+                            }
+                        };
+                } else {
+                    err.print("WTF: JSONObject is not a local_object or a remote_code? "+json_arg_obj.toString());
+                }
             }
-            // if(known_objects.containsKey((String)json_arg)) {
-            //    json_arg = known_objects.get((String)json_arg);
-            // }
+
             args.add(json_arg);
             arg_types.add(json_arg.getClass());
         }
     }
 
     
-    private static Class<?> my_find_class(String perl_name) {
+    private static Class<?> my_find_class(String perl_name) throws ClassNotFoundException {
         String java_name;
 
         if (perl_name.startsWith("Object::Remote::Java::")) {
@@ -250,11 +285,7 @@ public class Core {
         java_name = java_name.replaceAll("::", ".");
         System.err.printf("perl name %s is java name %s\n", perl_name, java_name);
 
-        try {
-            return Class.forName(java_name);
-        } catch (ClassNotFoundException e) {
-            return null;
-        }
+        return Class.forName(java_name);
     }
 
     // Returns true if we have *any* method that might work for this name, when we need a result for ->can.
@@ -378,11 +409,15 @@ public class Core {
             }
         }
 
-        throw new NoSuchMethodException();
+        String arguments_string = "";
+        for (Class<?> arg_class : args) {
+            arguments_string += arg_class.getName() + ", ";
+        }
 
+        throw new NoSuchMethodException("Cannot find constructor on class "+klass.getName()+" with arguments "+arguments_string);
     }
     
-    private static Method my_find_method(Class<?> klass, String name, Class<?>[] args) 
+    public static Method my_find_method(Class<?> klass, String name, Class<?>[] args) 
         throws SecurityException, NoSuchMethodException
     {
     
@@ -420,7 +455,12 @@ public class Core {
             }
         }
 
-        throw new NoSuchMethodException();
+        String arguments_string = "";
+        for (Class<?> arg_class : args) {
+            arguments_string += arg_class.getName() + ", ";
+        }
+
+        throw new NoSuchMethodException("Cannot find method named "+name+" on class "+klass.getName()+" with arguments "+arguments_string);
     }
 
 

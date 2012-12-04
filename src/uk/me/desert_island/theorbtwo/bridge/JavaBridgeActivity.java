@@ -1,77 +1,108 @@
 package uk.me.desert_island.theorbtwo.bridge;
 
 import android.app.Activity;
-import android.widget.Toast;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.content.ComponentName;
 import android.content.Context;
-import android.os.IBinder;
-import android.os.Handler;
-import android.os.Messenger;
-import android.os.Message;
-import android.os.RemoteException;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
+import android.os.Messenger;
+import android.os.RemoteException;
+import android.util.Log;
+import android.widget.Toast;
+import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.UnknownHostException;
 
 public class JavaBridgeActivity extends Activity
 {
+    private TcpIpConnection my_connection;
+    private final String LOGTAG = "JavaBridgeActivity";
+    private Runnable on_configuration_changed_callback;
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-    }
-
-    // Listen to messages from the service
-    class IncomingHandler extends Handler {
-        @Override
-        public void handleMessage (Message msg) {
-            System.err.println("(Activity)Message time: " + msg.getWhen() + "\n(Activity)Message content: " + msg.obj.toString());
-        }
-    }
-    Messenger activityMessenger = new Messenger(new IncomingHandler());
-    Messenger serviceMessenger = null;
-    boolean isBound;
-    
-    private ServiceConnection sConnection = new ServiceConnection() {
-            public void onServiceConnected(ComponentName className, IBinder service) {
-                // This is called when the connection with the service has been
-                // established, giving us the object we can use to
-                // interact with the service.  We are communicating with the
-                // service using a Messenger, so here we get a client-side
-                // representation of that from the raw IBinder object.
-                serviceMessenger = new Messenger(service);
-                Message message = Message.obtain(null, JavaBridgeService.MSG_SETUP);
-                message.replyTo = activityMessenger;
-                try {
-                    serviceMessenger.send(message);
-                }
-                catch (RemoteException e) {
-                    e.printStackTrace();
-                }
-
-                isBound = true;
-            }
-
-            public void onServiceDisconnected(ComponentName className) {
-                // This is called when the connection with the service has been
-                // unexpectedly disconnected -- that is, its process crashed.
-                serviceMessenger = null;
-                isBound = false;
-            }
-        };
-
-    @Override
-    public void onStart() {
-        super.onStart();
-        Intent service_intent = new Intent(this, JavaBridgeService.class);
-        bindService(service_intent, sConnection, Context.BIND_AUTO_CREATE);
         
-        //        AndroidServiceStash.set_activity(this);
+        final Activity this_activity = this;
+        AndroidServiceStash.set_activity(this_activity);
 
-        //        startService(service_intent);
-        Toast.makeText(this, "Started JavaBridgeService", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this_activity, "Starting server ... ", Toast.LENGTH_SHORT).show();
+        if(my_connection != null) {
+            Toast.makeText(this_activity, "TCP-IP server already running", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        new Thread(new Runnable() {
+                public void run() {
+                    Looper.prepare();
+
+                    // Would prefer that this not be 0.0.0.0 !
+                    InetAddress bind_address;
+                    try {
+                        bind_address = Inet4Address.getByName("0.0.0.0");
+                    } catch (UnknownHostException e) {
+                        Log.e(LOGTAG, "Failed to find InetAddress 0.0.0.0");
+                        return;
+                    }
+                    
+                    ServerSocket server_socket;
+                    try {
+                        server_socket = new ServerSocket(9849, 1, bind_address);
+                    } catch(IOException e) {
+                        Log.e(LOGTAG, "Failed to accept create server socket on 9849");
+                        return;
+                    }
+                    
+                    while (true) {
+                        try {
+                            Socket connected_socket = server_socket.accept();
+                            my_connection = new TcpIpConnection(connected_socket, new PrintyThingAndroid("JavaBridgeService"));
+                            Log.d(LOGTAG, "Accepted new connection and started TcpIpConnection");
+                            my_connection.start();
+                        } catch (IOException e) {
+                            Log.e(LOGTAG, "Failed to accept socket connection!");
+                        }
+                    }
+                }
+            }).start();
     }
 
+    /* Called when the device's configuration changes, such as the
+     * user rotating the device or docking/undocking from an external
+     * keyboard. */
+    @Override public void onConfigurationChanged(Configuration new_config) {
+        // Somehow, this should get the perl side to execute some
+        // function, passing it new_config.
+        Log.w(LOGTAG, "onConfigurationChanged happened!");
+        if (on_configuration_changed_callback != null) {
+            on_configuration_changed_callback.run();
+        }
+        super.onConfigurationChanged(new_config);
+    }
+
+    public void set_on_configuration_changed_callback(Runnable callback) {
+        this.on_configuration_changed_callback = callback;
+    }
+
+    public void set_view_components(Runnable callback) {
+        callback.run();
+    }
+
+    
+    @Override
+        public void onStart() {
+        super.onStart();
+    }
 }

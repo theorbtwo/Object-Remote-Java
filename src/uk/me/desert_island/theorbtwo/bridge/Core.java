@@ -16,21 +16,18 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 
 public class Core {
+
+    private PrintStream out;
+    private PrintyThing err;
+
+    public Core (PrintStream out_str, PrintyThing err_str) {
+        out = out_str;
+        err = err_str;
+    }
+
     private static HashMap<String, Object> known_objects = new HashMap<String, Object>();
 
-    /*
-    class JavaBridgeHelper {
-        JavaBridgeHelper(Object obj, String method, Class<?>[] args) {
-            return new Runnable() {
-                public void run() {
-                    Method meth = my_find_method(obj.getClass(), method, args);
-                    return meth.invoke(obj, args.toArray());
-                }
-            };
-        }
-    }
-    */
-    private static Object handle_call(JSONArray incoming, PrintyThing err) 
+    private Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
     {
         //  0      1          2                    3 4      5                                          6     7
@@ -147,7 +144,7 @@ public class Core {
         return null;
     }
     
-    public static void handle_line(StringBuilder in_line, PrintStream out, PrintyThing err) 
+    public void handle_line(StringBuilder in_line) 
         throws JSONException, Exception
     {
         JSONArray incoming = new JSONArray(in_line.toString());
@@ -229,15 +226,34 @@ public class Core {
         }
             
         out.println(json_out.toString());
-        
     }
 
-    private static void run_remote_code(String id) {
+    private void run_remote_code(String id) {
         System.err.println("Trying to run remote code "+id);
-        
+
+        // Now we need to construct a "call remote code" line to throw at the other side:
+        // 4921 <<< ["call_free","NULL","18801256","done",{"__remote_code__":"the_id_goes_here"}]
+
+        JSONArray code_request = new JSONArray();
+        String my_id = obj_ident(code_request); // We will need to remember this for later, maybe?
+        code_request.put(new String("call_free"));
+        code_request.put(JSONObject.NULL);
+        code_request.put(my_id);
+        code_request.put(new String("done"));
+        JSONObject rc_args = new JSONObject();
+        try {
+            rc_args.put("__remote_code__", id);
+        } catch (JSONException e) {
+            // This is dumb..
+            err.print("Failed to code JSON properly in run_remote_code!");
+        }
+        code_request.put(rc_args);
+
+        out.println(code_request.toString());
+
     }
 
-    private static void convert_json_args_to_java
+    private void convert_json_args_to_java
         (JSONArray incoming, int start_index, ArrayList<Class> arg_types, ArrayList<Object> args, PrintyThing err) throws JSONException {
         for (int i = start_index; i < incoming.length(); i++) {
             Object json_arg = incoming.get(i);

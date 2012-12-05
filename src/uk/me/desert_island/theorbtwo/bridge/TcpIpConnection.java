@@ -9,6 +9,7 @@ public class TcpIpConnection {
 
     private Socket incoming_socket;
     private PrintyThing err_log;
+    private Core core;
     public TcpIpConnection(Socket incoming, PrintyThing pt) {
         incoming_socket = incoming;
         err_log = pt;
@@ -18,6 +19,8 @@ public class TcpIpConnection {
         try {
             InputStream in_stream = incoming_socket.getInputStream();
             PrintStream out_stream = new PrintStream(incoming_socket.getOutputStream());
+            core = new Core(out_stream, err_log);
+
             out_stream.print("Shere\n");
             // handle until connection closed
             Boolean stop = false;
@@ -43,8 +46,7 @@ public class TcpIpConnection {
             if (line != null) {
                 err_log.print("Read line from client:" + line); 
                 try {
-                    Core.handle_line(new StringBuilder(line),
-                                     out_stream, err_log);
+                    core.handle_line(new StringBuilder(line));
                 } catch(Exception e) {
                     err_log.print("TcpIpConnection: Input was not parseable as JSON "+ line + "(or who knows what else) " + e);
                     
@@ -64,6 +66,11 @@ public class TcpIpConnection {
         return false;
     }
 
+    /*
+     * This should call start.. or something. Right now it complains: error: non-static variable core cannot be referenced from a static context
+     * [javac]                     core.handle_line(in_line);
+
+
     public static void main(String[] args)
         throws java.io.IOException, org.json.JSONException
     {
@@ -74,6 +81,7 @@ public class TcpIpConnection {
         InputStream in_stream = connected_sock.getInputStream();
         PrintStream out_stream = new PrintStream(connected_sock.getOutputStream());
         
+        
         out_stream.print("Shere\n");
 
         java.lang.StringBuilder in_line = new StringBuilder();
@@ -83,19 +91,19 @@ public class TcpIpConnection {
             System.err.print("Reading\n");
             c = in_stream.read();
             
-            /* catch (java.io.IOException e) {
-                System.err.println("IOException!");
-                System.exit(1);
+            // catch (java.io.IOException e) {
+            //   System.err.println("IOException!");
+            //   System.exit(1);
                 // usless, but keeps javac from giving a might-be-used-uninit error
-                c = -1;
-                }*/
+            //   c = -1;
+            //    }
 
             if (c == 10) {
                 // newline.
                 //System.err.printf("Got a line: '%s'\n", in_line);
               
                 try {
-                    Core.handle_line(in_line, out_stream, new PrintyThingNormal(System.err));
+                    core.handle_line(in_line);
                 } catch(Exception e) {
                     System.err.println("handle_line failed" + e);
                 }
@@ -111,5 +119,5 @@ public class TcpIpConnection {
             }
         }
     }
-    
+  */    
 }

@@ -24,9 +24,7 @@ $activity->set_on_configuration_changed_callback(sub {
 my $runnable = uk::me::desert_island::theorbtwo::bridge::MethodCallRunnable->new::on($conn, $activity, 'setContentView', [$layout]);
 $activity->runOnUiThread($runnable);
 
-while (1) {
-  # this is horrible.
-  sleep 0.1;
-}
-
-#$activity->runOnUiThread(sub{ $activity->setContentView($view) });
+# Object::Remote::MiniLoop
+my $or_loop = Object::Remote->current_loop;
+$or_loop->want_run;
+$or_loop->run_while_wanted;

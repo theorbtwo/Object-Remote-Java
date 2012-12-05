@@ -16,6 +16,10 @@ my $layout = android::widget::LinearLayout->new::on($conn, $activity);
 $layout->addView($edit_text);
 $layout->addView($button);
 
+my $old_config = $activity->getResources->getConfiguration;
+
+dump_config("orig config: ", $old_config);
+
 $activity->set_on_configuration_changed_callback(sub {
                                                    print "Your configuration changed, and we actually managed to get here!\n";
                                                  });
@@ -28,3 +32,13 @@ $activity->runOnUiThread($runnable);
 my $or_loop = Object::Remote->current_loop;
 $or_loop->want_run;
 $or_loop->run_while_wanted;
+
+sub dump_config {
+  my ($prefix, $config) = @_;
+
+  for my $field (qw<fontScale hardKeyboardHidden keyboard keyboardHidden locale mcc mnc navigation navigationHidden orientation screenLayout touchscreen uiMode>) {
+    my $val = $config->__get_property($field);
+    print "$prefix$field: $val\n"
+  }
+}
+

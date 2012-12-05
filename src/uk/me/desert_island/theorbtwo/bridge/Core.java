@@ -32,6 +32,7 @@ public class Core {
     {
         //  0      1          2                    3 4      5                                          6     7
         // ["call","31247544","class_call_handler",0,"call","Object::Remote::Java::java::lang::System","can","getProperties"]
+
         String call_type = incoming.getString(2);
         
         if (call_type.equals("class_call_handler")) {
@@ -76,16 +77,22 @@ public class Core {
             // A normal method call.
             Object obj = known_objects.get(call_type);
             String do_what = incoming.getString(4);
-            if (do_what.equals("call") && obj instanceof CanResult) {
+
+            if (do_what.equals("__get_property")) {
+                //  0       1           2                                             3   4                 5
+                //                      call_type                                         do_what
+                // ["call", "34244816", "android.content.res.Configuration:410a6598", "", "__get_property", "densityDpi"]
+                
+                String property_name = incoming.getString(5);
+                
+                Class klass = obj.getClass();
+                return klass.getField(property_name).get(obj);
+            } else if (do_what.equals("call") && obj instanceof CanResult) {
                 // >>> ["call","139214384","class_call_handler",0,"call","uk::me::desert_island::theorbtwo::bridge::AndroidServiceStash","can","get_service"]
-                // <<< ["call_free","NULL","139214384","done",{"__remote_code__":"uk.me.desert_island.theorbtwo.bridge.CanResult:410c7850"}]
                 // >>> ["call","139097736","uk.me.desert_island.theorbtwo.bridge.CanResult:410c7850","","call"]
-                // <<< ["call_free","NULL","139097736","done",{"__remote_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b83f0"}]
 
                 //  0       1          2                                                         3  4      5                        6                                 7               8
                 // ["call","139214400","uk.me.desert_island.theorbtwo.bridge.CanResult:410d8508","","call","android::widget::Toast",{"__remote_object__":"139315920"},"toast content",0]
-                // ["call","139175944","uk.me.desert_island.theorbtwo.bridge.CanResult:410d9db8","","call","android::widget::Toast",{"__remote_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b9d40"},"toast content",0]
-                // ["call","139178632","uk.me.desert_island.theorbtwo.bridge.CanResult:41093298","","call","android::widget::Toast",{"__local_object__":"uk.me.desert_island.theorbtwo.bridge.JavaBridgeService:410b0f88"},"toast content",0]
 
 
                 // A call to a coderef (a CanResult from ->can::on, most likely).
@@ -102,6 +109,7 @@ public class Core {
                 ArrayList<Object> args = new ArrayList<Object>();
                 ArrayList<Class> arg_types = new ArrayList<Class>();
 
+                
                 if(incoming.length() > 5) {
                     if (incoming.get(5) instanceof String) {
                         // FIXME: how do we tell the difference between a static method call and a call that happens to be on a string?
@@ -122,6 +130,7 @@ public class Core {
                 
                 Method meth = my_find_method(method_class, method_name, arg_types.toArray(new Class<?>[0]));
                 return meth.invoke(invocant, args.toArray());
+
                 
             } else {
                 // Really, just a normal method call.

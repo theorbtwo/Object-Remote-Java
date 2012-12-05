@@ -228,29 +228,21 @@ public class Core {
         out.println(json_out.toString());
     }
 
-    private void run_remote_code(String id) {
-        System.err.println("Trying to run remote code "+id);
+    private void run_remote_code(String remote_code_id) {
+        System.err.println("Trying to run remote code "+remote_code_id);
 
         // Now we need to construct a "call remote code" line to throw at the other side:
-        // 4921 <<< ["call_free","NULL","18801256","done",{"__remote_code__":"the_id_goes_here"}]
+        // 11476 >>> ["call","38031432","id_from_remote_code",null,"call"]
 
         JSONArray code_request = new JSONArray();
         String my_id = obj_ident(code_request); // We will need to remember this for later, maybe?
-        code_request.put(new String("call_free"));
-        code_request.put(JSONObject.NULL);
+        code_request.put("call");
         code_request.put(my_id);
-        code_request.put(new String("done"));
-        JSONObject rc_args = new JSONObject();
-        try {
-            rc_args.put("__remote_code__", id);
-        } catch (JSONException e) {
-            // This is dumb..
-            err.print("Failed to code JSON properly in run_remote_code!");
-        }
-        code_request.put(rc_args);
+        code_request.put(remote_code_id);
+        code_request.put(JSONObject.NULL);
+        code_request.put("call");
 
         out.println(code_request.toString());
-
     }
 
     private void convert_json_args_to_java

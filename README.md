@@ -53,11 +53,11 @@ This is a work in progress, so far we can
 * Pass objects as method arguments
 * Run callbacks with no arguments
 
-To build and install (on Android 4.0.3+)
-----------------------------------------
+To build and install (Android 2.2+)
+-----------------------------------
 
 * Download the Android SDK tools: http://developer.android.com/sdk/index.html and unpack it.
-* To fetch the actual SDK, run the "tools/android" command, which will open a GUI, choose the appropriate SDK for your device and tell it to install. Docs: http://developer.android.com/sdk/installing/adding-packages.html
+* To fetch the actual SDK, run the "tools/android" command, which will open a GUI, install an SDK from the list. We are using *android-12*, so pick that if available. Docs: http://developer.android.com/sdk/installing/adding-packages.html
 * Install the "ant" tool for your machine (available as a package in most linux distributions).
 * Create a file named "local.properties" in the main checkout directory of this project, and add one line:
 
@@ -70,6 +70,18 @@ To build and install (on Android 4.0.3+)
 * Configure your Android device to allow installing packages outside of Google-Play, by checking the option "Unknown Sources" in the "Security" section of the "Settings" app.
 * Copy the file bin/JavaBridgeActivity-debug.apk to your Android device and install and run it.
 * Now you can run Perl scripts to connect to the server on <your device ip>:9849.
+
+Troubleshooting
+---------------
+
+* Unresolved project targets, eg:
+
+    BUILD FAILED
+    /opt/adt-bundle-linux/sdk/tools/ant/build.xml:539: Unable to resolve project target 'android-12'
+    
+Means that either you skipped the "fetch an actual SDK" point above, or you installed something that wasn't "android-12". Either go install android-12, or edit the project.properties file to match the one you did download.
+
+(There's an android command for updating the project but, I'd have to go lookup what it is)
 
 OR Download it
 --------------

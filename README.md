@@ -1,7 +1,7 @@
 Object-Remote-Java
 ==================
 
-Object::Remote is a Perl module which can be used to run your Perl program or script on a remote host and return the results, without needing to run any install steps. The only thing that must exist on the host is Perl itself.
+Object::Remote is a Perl module which can be used to run your Perl program or script on a remote host and return the results, without needing to run any install steps. The only thing that must exist on the host is Perl itself. You'll need a version of Perl that's at least 5.8.1 to use it.
 
 Object-Remote-Java (or JavaBridge) is an Object::Remote compatible backend written in Java. It can be used to call Java objects and methods by writing Perl code.
 

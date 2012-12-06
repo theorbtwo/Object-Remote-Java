@@ -60,7 +60,7 @@ To build and install (on Android 4.0.3+)
 * Install the "ant" tool for your machine (available as a package in most linux distributions).
 * Create a file named "local.properties" in the main checkout directory of this project, and add one line:
 
-    sdk.dir=<path to the unpacked SDK>
+    sdk.dir=/path/to/the/unpacked/SDK
 
 * Run ant from this directory:
 
@@ -69,6 +69,11 @@ To build and install (on Android 4.0.3+)
 * Configure your Android device to allow installing packages outside of Google-Play, by checking the option "Unknown Sources" in the "Security" section of the "Settings" app.
 * Copy the file bin/JavaBridgeActivity-debug.apk to your Android device and install and run it.
 * Now you can run Perl scripts to connect to the server on <your device ip>:9849.
+
+OR Download it
+--------------
+
+There is a prebuilt copy (Android v4.0.3) in the githun downloads directory: https://github.com/theorbtwo/Object-Remote-Java/downloads
 
 Older versions of Android
 -------------------------

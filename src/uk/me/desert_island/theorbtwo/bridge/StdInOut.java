@@ -4,12 +4,16 @@ package uk.me.desert_island.theorbtwo.bridge;
 //import .PrintyThingNormal;
 
 public class StdInOut {
+
   public static void main(String[] args)
       throws java.io.IOException, org.json.JSONException
   {
+    Core core;
+
     System.out.println("Ready\n");
 
     java.lang.StringBuilder in_line = new StringBuilder();
+    core = new Core(System.out, new PrintyThingNormal(System.err));
     while (true) {
       int c;
 
@@ -27,7 +31,7 @@ public class StdInOut {
         //System.err.printf("Got a line: '%s'\n", in_line);
 
         try {
-            Core.handle_line(in_line, System.out, new PrintyThingNormal(System.err));
+            core.handle_line(in_line);
         } catch(Exception e) {
             System.err.println("handle_line failed" + e);
         }

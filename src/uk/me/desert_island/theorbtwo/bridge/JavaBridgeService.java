@@ -29,8 +29,6 @@ public class JavaBridgeService extends IntentService {
 
     public JavaBridgeService() {
         super("JavaBridgeService");
-        AndroidServiceStash.set_service(this);
-        //        AndroidServiceStash.set_activity(new Activity());
     }
 
     @Override

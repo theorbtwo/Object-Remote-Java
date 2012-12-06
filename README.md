@@ -57,6 +57,7 @@ To build and install (on Android 4.0.3+)
 ----------------------------------------
 
 * Download the Android SDK tools: http://developer.android.com/sdk/index.html and unpack it.
+* To fetch the actual SDK, run the "tools/android" command, which will open a GUI, choose the appropriate SDK for your device and tell it to install. Docs: http://developer.android.com/sdk/installing/adding-packages.html
 * Install the "ant" tool for your machine (available as a package in most linux distributions).
 * Create a file named "local.properties" in the main checkout directory of this project, and add one line:
 
@@ -73,7 +74,7 @@ To build and install (on Android 4.0.3+)
 OR Download it
 --------------
 
-There is a prebuilt copy (Android v4.0.3) in the githun downloads directory: https://github.com/theorbtwo/Object-Remote-Java/downloads
+There is a prebuilt copy (Android v4.0.3) in the github downloads directory: https://github.com/theorbtwo/Object-Remote-Java/downloads
 
 Older versions of Android
 -------------------------

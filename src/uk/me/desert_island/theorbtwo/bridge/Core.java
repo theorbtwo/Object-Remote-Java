@@ -6,6 +6,7 @@ import java.lang.Class;
 import java.util.HashMap;
 import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Array;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import org.json.JSONArray;
@@ -93,7 +94,7 @@ public class Core {
 
                 //  0       1          2                                                         3  4      5                        6                                 7               8
                 // ["call","139214400","uk.me.desert_island.theorbtwo.bridge.CanResult:410d8508","","call","android::widget::Toast",{"__remote_object__":"139315920"},"toast content",0]
-
+                // ["call","27108224" ,"uk.me.desert_island.theorbtwo.bridge.CanResult:410ce078","","call","android.hardware.SensorEventListener",{"__remote_code__":"24416064"}]
 
                 // A call to a coderef (a CanResult from ->can::on, most likely).
                 // Object wantarray = incoming.getString(3);
@@ -109,24 +110,26 @@ public class Core {
                 ArrayList<Object> args = new ArrayList<Object>();
                 ArrayList<Class> arg_types = new ArrayList<Class>();
 
-                
-                if(incoming.length() > 5) {
-                    if (incoming.get(5) instanceof String) {
-                        // FIXME: how do we tell the difference between a static method call and a call that happens to be on a string?
-                        static_call = true;
-                        invocant = null;
-                    } else {
-                        static_call = false;
-                        // JSONArray containing JSONObject with key "__local_object__", which contains the id of an object we fetched earlier (probably)
-                        invocant = known_objects.get(incoming.getJSONObject(5).get("__local_object__"));
-                        if(invocant == null) {
-                            err.print("Can't find invocant object from:" + incoming.get(5));
-                        }
-                    }                
-                }
+                // if(incoming.length() > 5) {
+                //     if (incoming.get(5) instanceof String) {
+                //         // FIXME: how do we tell the difference between a static method call and a call that happens to be on a string?
+                //         static_call = true;
+                //         invocant = null;
+                //     } else {
+                //         static_call = false;
+                //         // JSONArray containing JSONObject with key "__local_object__", which contains the id of an object we fetched earlier (probably)
+                //         invocant = known_objects.get(incoming.getJSONObject(5).get("__local_object__"));
+                //         if(invocant == null) {
+                //             err.print("Can't find invocant object from:" + incoming.get(5));
+                //         }
+                //     }                
+                // }
 
-                // magic number 6 = start extracting args at this index
-                convert_json_args_to_java(incoming, 6, arg_types, args, err);
+                //  0      1          2                                                         3  4      5                                      6
+                // ["call","36405984","uk.me.desert_island.theorbtwo.bridge.CanResult:410b0ae8","","call","android.hardware.SensorEventListener",{"__remote_code__":"33713760"}
+
+                // magic number 5 = start extracting args at this index
+                convert_json_args_to_java(incoming, 5, arg_types, args, err);
                 
                 Method meth = my_find_method(method_class, method_name, arg_types.toArray(new Class<?>[0]));
                 return meth.invoke(invocant, args.toArray());
@@ -206,38 +209,12 @@ public class Core {
             err.print("Return (class):    " + retval.getClass().toString() + "\n");
         }
 
-        if (retval == null) {
-            json_out.put(JSONObject.NULL);
-        } else if (retval instanceof CanResult) {
-            JSONObject return_json = new JSONObject();
-            String ret_objid = obj_ident(retval);
-            known_objects.put(ret_objid, retval);
-            return_json.put("__remote_code__", ret_objid);
-            json_out.put(return_json);
-        
-        } // For the wrapped basic types, we want the specific JSONObject.put for that basic type.
-        else if (retval.getClass() == String.class) {
-            json_out.put((String)retval);
-        } else if (retval.getClass() == Float.class) {
-            json_out.put(((Float)retval).doubleValue());
-        } else if (retval.getClass() == Double.class) {
-            json_out.put(((Double)retval).doubleValue());
-        } else if (retval.getClass() == Integer.class) {
-            json_out.put(((Integer)retval).intValue());
-        } else {
-            // FIXME: Quite possibly we shouldn't return all of these as objects, but rather as plain strings or numbers.
-            JSONObject return_json = new JSONObject();
-            String ret_objid = obj_ident(retval);
-            err.print("Store object: " + ret_objid);
-            known_objects.put(ret_objid, retval);
-            return_json.put("__remote_object__", ret_objid);
-            json_out.put(return_json);
-        }
-            
+        json_out.put(convert_java_args_to_json(retval));
+
         out.println(json_out.toString());
     }
 
-    private void run_remote_code(String remote_code_id) {
+    public void run_remote_code(String remote_code_id, Object... args) {
         System.err.println("Trying to run remote code "+remote_code_id);
 
         // Now we need to construct a "call remote code" line to throw at the other side:
@@ -251,8 +228,61 @@ public class Core {
         code_request.put(JSONObject.NULL);
         code_request.put("call");
 
+        if (args.length > 0) {
+            for (Object a : args) {
+                //err.print("Argument: "+a+"\n");
+                try {
+                    code_request.put(convert_java_args_to_json(a));
+                } catch (JSONException e) {
+                    err.print("WTF, got JSONException packing arguments for run_remote_code: "+e);
+                }
+            }
+        }
+
         out.println(code_request.toString());
     }
+
+    private Object convert_java_args_to_json(Object input) 
+        throws JSONException
+    {
+        if (input == null) {
+            return JSONObject.NULL;
+        } else if (input instanceof CanResult) {
+            JSONObject return_json = new JSONObject();
+            String ret_objid = obj_ident(input);
+            known_objects.put(ret_objid, input);
+            return_json.put("__remote_code__", ret_objid);
+
+            return return_json;
+        } else if (input.getClass().isArray()) {
+            JSONArray return_json = new JSONArray();
+
+            int length = Array.getLength(input);
+            for (int i=0; i < length; i++) {
+                return_json.put(i, convert_java_args_to_json(Array.get(input, i)));
+            }
+            
+            return return_json;
+        } // For the wrapped basic types, we want the specific JSONObject.put for that basic type.
+        else if (input.getClass() == String.class) {
+            return (String)input;
+        } else if (input.getClass() == Float.class) {
+            return ((Float)input).doubleValue();
+        } else if (input.getClass() == Double.class) {
+            return ((Double)input).doubleValue();
+        } else if (input.getClass() == Integer.class) {
+            return ((Integer)input).intValue();
+        } else {
+            JSONObject return_json = new JSONObject();
+            String ret_objid = obj_ident(input);
+            err.print("Store object: " + ret_objid);
+            known_objects.put(ret_objid, input);
+            return_json.put("__remote_object__", ret_objid);
+            
+            return return_json;
+        }
+    }
+
 
     private void convert_json_args_to_java
         (JSONArray incoming, int start_index, ArrayList<Class> arg_types, ArrayList<Object> args, PrintyThing err) throws JSONException {
@@ -275,13 +305,9 @@ public class Core {
 
                     final String code_id = (String)json_arg_obj.get("__remote_code__");
                     //final Core the_core = this;
-                    json_arg = new Runnable() {
-                            public void run() {
-                                run_remote_code(code_id);
-                            }
-                        };
+                    json_arg = new PassthroughRunnable(code_id, this);
                 } else {
-                    err.print("WTF: JSONObject is not a local_object or a remote_code? "+json_arg_obj.toString());
+                    err.print("WTF: JSOObject is not a local_object or a remote_code? "+json_arg_obj.toString());
                 }
             }
 
@@ -306,9 +332,11 @@ public class Core {
     }
 
     // Returns true if we have *any* method that might work for this name, when we need a result for ->can.
-    private static boolean has_any_methods(Class<?> klass, String name) {
+    private boolean has_any_methods(Class<?> klass, String name) {
+        err.print("Looking for any methods like "+name);
         Method[] meths = klass.getMethods();
         for (Method meth : meths) {
+            err.print("Trying method:"+meth.getName()+" against " + name);
             if (meth.getName().equals(name)) {
                 return true;
             }

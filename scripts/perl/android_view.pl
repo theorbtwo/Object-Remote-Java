@@ -18,10 +18,19 @@ $layout->addView($button);
 
 my $old_config = $activity->getResources->getConfiguration;
 
+print $old_config;
+
 dump_config("orig config: ", $old_config);
 
+my $n = 0;
+
 $activity->set_on_configuration_changed_callback(sub {
+                                                   my ($new_config) = @_;
                                                    print "Your configuration changed, and we actually managed to get here!\n";
+                                                   #dump_config("new config: ", $new_config);
+
+                                                   $n++;
+                                                   $activity->runOnUiThread(sub {$button->setText("$n")});
                                                  });
 
 # 21:29 <@mst> $helper->callMethodOnUiThreadOf($activity, setContentView => $view);

@@ -26,7 +26,7 @@ public class Core {
         err = err_str;
     }
 
-    private static HashMap<String, Object> known_objects = new HashMap<String, Object>();
+    private HashMap<String, Object> known_objects = new HashMap<String, Object>();
 
     private Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
@@ -272,6 +272,8 @@ public class Core {
             return ((Double)input).doubleValue();
         } else if (input.getClass() == Integer.class) {
             return ((Integer)input).intValue();
+        } else if (input.getClass() == Long.class) {
+            return ((Long)input).longValue();
         } else {
             JSONObject return_json = new JSONObject();
             String ret_objid = obj_ident(input);

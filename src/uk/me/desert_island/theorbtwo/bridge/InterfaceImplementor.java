@@ -30,6 +30,12 @@ public class InterfaceImplementor {
         public Object invoke(Object proxy, Method method, Object[] args) {
             System.err.println("Invoke, method (long) name: "+method.toGenericString());
             // FIXME: Return?
+            /*
+            if(method.getName().equals("toString")) {
+                // Less junk over the wire please!
+                return "MyInvocationHandler (magic goes here)";
+            }
+            */
             callback.run_extended(this, proxy, method, args);
             return null;
         }

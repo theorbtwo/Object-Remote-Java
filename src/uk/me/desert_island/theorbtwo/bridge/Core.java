@@ -274,6 +274,14 @@ public class Core {
             return ((Integer)input).intValue();
         } else if (input.getClass() == Long.class) {
             return ((Long)input).longValue();
+        } else if (input.getClass() == Boolean.class) {
+            // Use perl conventions for these
+            if ((Boolean)input) {
+                return 1;
+            } else {
+                // This probably won't have the special semantics of the one true false value, which is "" in string context and 0 in numeric context, all without warning.
+                return JSONObject.NULL;
+            }
         } else {
             JSONObject return_json = new JSONObject();
             String ret_objid = obj_ident(input);

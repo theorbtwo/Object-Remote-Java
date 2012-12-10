@@ -26,7 +26,10 @@ public class JavaBridgeActivity extends Activity
 {
     private TcpIpConnection my_connection;
     private final String LOGTAG = "JavaBridgeActivity";
+
+    /* Callbacks we can set to run when events on the activity itself happen */
     private Runnable on_configuration_changed_callback;
+    private PassthroughRunnable on_activity_result_callback;
 
     /** Called when the activity is first created. */
     @Override
@@ -94,6 +97,21 @@ public class JavaBridgeActivity extends Activity
 
     public void set_on_configuration_changed_callback(Runnable callback) {
         this.on_configuration_changed_callback = callback;
+    }
+
+    /* Called when an Intent/other activity we start returns
+     */
+    @Override  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Log.w(LOGTAG, "onActivityResult happened!");
+        if(on_activity_result_callback != null) {
+            on_activity_result_callback.run_extended(requestCode, resultCode, data);
+        }
+
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    public void set_on_activity_result_callback(PassthroughRunnable callback) {
+        this.on_activity_result_callback = callback;
     }
 
     public void set_view_components(Runnable callback) {

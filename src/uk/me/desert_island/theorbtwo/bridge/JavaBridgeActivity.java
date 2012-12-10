@@ -21,6 +21,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.HashMap;
 
 public class JavaBridgeActivity extends Activity
 {
@@ -28,8 +29,7 @@ public class JavaBridgeActivity extends Activity
     private final String LOGTAG = "JavaBridgeActivity";
 
     /* Callbacks we can set to run when events on the activity itself happen */
-    private Runnable on_configuration_changed_callback;
-    private PassthroughRunnable on_activity_result_callback;
+    private HashMap event_callbacks = new HashMap();
 
     /** Called when the activity is first created. */
     @Override
@@ -82,6 +82,10 @@ public class JavaBridgeActivity extends Activity
             }).start();
     }
 
+    public void setEventCallbacks(HashMap new_callbacks) {
+        event_callbacks = new_callbacks;
+    }
+
     /* Called when the device's configuration changes, such as the
      * user rotating the device or docking/undocking from an external
      * keyboard. */
@@ -89,29 +93,21 @@ public class JavaBridgeActivity extends Activity
         // Somehow, this should get the perl side to execute some
         // function, passing it new_config.
         Log.w(LOGTAG, "onConfigurationChanged happened!");
-        if (on_configuration_changed_callback != null) {
-            on_configuration_changed_callback.run();
+        if (event_callbacks.get("on_configuration_changed") != null) {
+            ((Runnable)event_callbacks.get("on_configuration_changed")).run();
         }
         super.onConfigurationChanged(new_config);
-    }
-
-    public void set_on_configuration_changed_callback(Runnable callback) {
-        this.on_configuration_changed_callback = callback;
     }
 
     /* Called when an Intent/other activity we start returns
      */
     @Override  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         Log.w(LOGTAG, "onActivityResult happened!");
-        if(on_activity_result_callback != null) {
-            on_activity_result_callback.run_extended(requestCode, resultCode, data);
+        if(event_callbacks.get("on_activity_result") != null) {
+            ((PassthroughRunnable)event_callbacks.get("on_activity_result")).run_extended(requestCode, resultCode, data);
         }
 
         super.onActivityResult(requestCode, resultCode, data);
-    }
-
-    public void set_on_activity_result_callback(PassthroughRunnable callback) {
-        this.on_activity_result_callback = callback;
     }
 
     public void set_view_components(Runnable callback) {

@@ -21,7 +21,9 @@ my $layout = android::widget::LinearLayout->new::on($conn, $activity);
 $layout->addView($edit_text);
 $layout->addView($button);
 
-$activity->set_on_activity_result_callback( sub {
+my $callbacks = java::util::HashMap->new::on($conn);
+
+$callbacks->put("on_activity_result", sub {
   my ($request_code, $result_code, $intent) = @_;
 
   if($request_code == $PICK_FILE_RESULT) {
@@ -40,6 +42,7 @@ $activity->set_on_activity_result_callback( sub {
     $activity->runOnUiThread($update_runnable);
   }
 });
+$activity->setEventCallbacks($callbacks);
 
 my $button_click_event = sub {
   my ($invocation_handler, $this, $method_info, $args) = @_;

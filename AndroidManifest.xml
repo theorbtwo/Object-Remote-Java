@@ -22,9 +22,12 @@
   </application>
   <!-- jb itself needs this -->
   <uses-permission android:name="android.permission.INTERNET" />
-  <!-- the rest are just so that users of jb can access this stuff -->
+  <!-- the rest are just so that users of jb can access this stuff - is there a better path for this, to make these dynamic? -->
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   
   <uses-sdk android:targetSdkVersion="8" android:minSdkVersion="8" />
 </manifest>

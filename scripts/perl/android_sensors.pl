@@ -21,23 +21,27 @@ my $runnable = uk::me::desert_island::theorbtwo::bridge::MethodCallRunnable->new
 $activity->runOnUiThread($runnable);
 
 my $sensor_manager = $activity->getSystemService($activity->__get_property('SENSOR_SERVICE'));
-# FIXME: SensorManager.SENSOR_ACCELERMOETER is marked as depreciated,
-# use Sensor.SENSOR_ACCELEROMETER instead.
+# FIXME: SensorManager.SENSOR_ACCELEROMETER is marked as depreciated,
+# use Sensor.TYPE_ACCELEROMETER instead.
 # my $accel_sensor = $sensor_manager->getDefaultSensor($sensor_manager->__get_property('SENSOR_ACCELEROMETER'));
-my $accel_sensor = $sensor_manager->getDefaultSensor(1); ## Sensor.TYPE_ACCELERMETER
+my $accel_sensor = $sensor_manager->getDefaultSensor(1); ## Sensor.TYPE_ACCELEROMETER
 # my $accel_sensor = $sensor_manager->getDefaultSensor(5); ## Sensor.TYPE_LIGHT
 
 my $accel_listener;
 
 my $accel_event_callback = sub {
-  my ($invocation_handler, $this, $method, $args) = @_;
-  print "In accel_event_callback: \n";
-  my $method_long_name = $method->toGenericString();
-  print " Method long name: $method_long_name\n";
-  print " Args: ", $args, "\n";
-  print " Number of args: ", 0+@$args, "\n";
+  my ($invocation_handler, $this, $method_info, $args) = @_;
+            # method_info.put(method);
+            # method_info.put(decl_class);
+            # method_info.put(short_name);
+            # method_info.put(long_name);
+  #print "In accel_event_callback: \n";
+  my $method_long_name = $method_info->[3];
+  #print " Method long name: $method_long_name\n";
+  #print " Args: ", $args, "\n";
+  #print " Number of args: ", 0+@$args, "\n";
   for my $i (0..@$args-1) {
-    print " Argument $i: ", $args->[$i], "\n";
+    #print " Argument $i: ", $args->[$i], "\n";
   }
 
   #Dump $args;
@@ -51,7 +55,9 @@ my $accel_event_callback = sub {
     say ">>Accuracy:  ", $sensor_event->__get_property('accuracy');
     say ">>Timestamp: ", $sensor_event->__get_property('timestamp');
     my $accel = $sensor_event->__get_property('values');
-    printf ">>Values:    (%02f, %02f, %02f)\n", @$accel;
+    my $mag = sqrt($accel->[0]**2 + $accel->[1]**2 + $accel->[2]**2);
+    printf ">>Values:  %0.2f = (%0.2f, %0.2f, %0.2f)\n", $mag, @$accel;
+
     print "\n";
     ## done reading, re-register.
     $sensor_manager->registerListener($accel_listener, $accel_sensor, 10*1000000);

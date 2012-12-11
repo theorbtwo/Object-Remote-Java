@@ -354,18 +354,111 @@ public class Core {
         return false;
     }
 
+    // Java Language Specification, Java 7 edition, section 5.1.1
+    static boolean check_identity_conversion(Class have_arg, Class want_arg) {
+        return (have_arg.equals(want_arg));
+    }
+
+    // Java Langauge Specification, Java 7 edition, section 5.1.2
+    static boolean check_widening_primitive_conversion(Class have_arg, Class want_arg) {
+        if (have_arg == null) {
+            return false;
+        }
+
+        if (have_arg.equals(byte.class) && (want_arg.equals(short.class) || 
+                                            want_arg.equals(int.class) ||
+                                            want_arg.equals(long.class) ||
+                                            want_arg.equals(float.class) ||
+                                            want_arg.equals(double.class))) {
+            return true;
+        }
+        
+        if (have_arg.equals(short.class) && (want_arg.equals(int.class) ||
+                                             want_arg.equals(long.class) ||
+                                             want_arg.equals(float.class) ||
+                                             want_arg.equals(double.class))) {
+            return true;
+        }
+        
+        if (have_arg.equals(char.class) && (want_arg.equals(int.class) ||
+                                            want_arg.equals(long.class) ||
+                                            want_arg.equals(float.class) ||
+                                            want_arg.equals(double.class))) {
+            return true;
+        }
+        
+        if (have_arg.equals(int.class) && (want_arg.equals(long.class) ||
+                                           want_arg.equals(float.class) ||
+                                           want_arg.equals(double.class))) {
+            return true;
+        }
+        
+        if (have_arg.equals(long.class) && (want_arg.equals(float.class) ||
+                                            want_arg.equals(double.class))) {
+            return true;
+        }
+
+        if (have_arg.equals(float.class) && (want_arg.equals(double.class))) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    // Java Language Specification, Java 7 edition, section 5.1.5
+    public static boolean check_widening_reference_conversion(Class have_arg, Class want_arg) {
+        // Technically, this also returns true on an identity conversion, but I'm fairly certian that it never matters.
+        return (want_arg.isAssignableFrom(have_arg));
+    }
+    
+    // Java Language Specification, Java 7 edition, section 5.1.8
+    public static Class do_unboxing_conversion(Class from) {
+        if (from.equals(Boolean.class)) {
+            return boolean.class;
+        }
+        if (from.equals(Byte.class)) {
+            return byte.class;
+        }
+        if (from.equals(Short.class)) {
+            return short.class;
+        }
+        if (from.equals(Character.class)) {
+            return char.class;
+        }
+        if (from.equals(Integer.class)) {
+            return int.class;
+        }
+        if (from.equals(Long.class)) {
+            return long.class;
+        }
+        if (from.equals(Float.class)) {
+            return float.class;
+        }
+        if (from.equals(Double.class)) {
+            return double.class;
+        }
+
+        // FIXME: How do I want to signal that unboxing isn't approprate?
+        return null;
+    }
+
     private static boolean compare_method_args(Class<?>[] args, Class<?>[] m_args)
     {
         boolean found=true;
         
         for (int i=0; i<args.length; i++) {
-            
-            String wanted_name = args[i].getName();
-            String got_name = m_args[i].getName();
+            Class wanted_class = m_args[i];
+            Class got_class = args[i];
+
+            String wanted_name = wanted_class.getName();
+            String got_name = got_class.getName();
+
+            System.err.printf("Comparing method args, wanted=%s, got=%s\n", wanted_name, got_name);
             
             // Java Language Specification, 3rd edition, 5.3 -- method arguments can have...
             // • an identity conversion (§5.1.1)
-            if (args[i].equals(m_args[i])) {
+            if (check_identity_conversion(got_class, wanted_class)) {
+                System.err.printf("OK, identity conversion\n");
                 continue;
             }
             
@@ -373,52 +466,27 @@ public class Core {
             // (Not applicable; our arguments will always be boxed types.)
             
             // • a widening reference conversion (§5.1.5)
-            if (m_args[i].isAssignableFrom(args[i])) {
-                System.err.printf("%s vs %s is OK (isAssignableFrom / a widening reference conversion\n",
-                                  wanted_name, got_name
-                                  );
+            if (check_widening_reference_conversion(got_class, wanted_class)) {
+                System.err.printf("OK, widening reference conversion\n");
                 continue;
             }
             
             // • a boxing conversion (§5.1.7) optionally followed by widening reference conversion
+            // (For now, this isn't applicable; our arguments will always be boxed types, and we already did straight widening reference conversions above.)
+
             // • an unboxing conversion (§5.1.8) optionally followed by a widening primitive conversion.
-            
-            // Java Language Specification, 3rd edition, 5.1.8
-            if (wanted_name.equals("java.lang.Boolean") && got_name.equals("boolean")) {
+            Class unboxed_got = do_unboxing_conversion(got_class);
+            if (unboxed_got != null && unboxed_got.equals(wanted_class)) {
+                System.err.printf("OK, unboxing (without widening primitive conversion)\n");
                 continue;
             }
-            
-            if (wanted_name.equals("java.lang.Byte") && got_name.equals("byte")) {
+            if (check_widening_primitive_conversion(do_unboxing_conversion(got_class), wanted_class)) {
+                System.err.printf("OK, unboxing, then widening primitive conversion\n");
                 continue;
             }
+
+            // ...some strange additional things can happen here, in certian cases?  
             
-            if (wanted_name.equals("java.lang.Character") && got_name.equals("char")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Short") && got_name.equals("short")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Long") && got_name.equals("long")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Float") && got_name.equals("float")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Double") && got_name.equals("double")) {
-                continue;
-            }
-            
-            if (wanted_name.equals("java.lang.Integer") && got_name.equals("int")) {
-                continue;
-            }
             System.err.printf("Argument mismatch on wanted_name='%s' vs got_name='%s'\n", wanted_name, got_name);
             found = false;
             break;

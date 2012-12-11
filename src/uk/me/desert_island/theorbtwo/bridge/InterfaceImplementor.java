@@ -23,16 +23,24 @@ public class InterfaceImplementor {
     public static class MyInvocationHandler implements InvocationHandler {
         private PassthroughRunnable callback;
         private String interface_name;
+        private int this_serial;
+        static int next_serial = 0;
 
         public MyInvocationHandler(PassthroughRunnable a_callback, String a_interface_name) {
             callback = a_callback;
             interface_name = a_interface_name;
+            this_serial = next_serial++;
+
+            System.err.println("Serial of this one: "+this_serial);
         }
         
         public Object invoke(Object proxy, Method method, Object[] args) 
             throws Throwable
         {
             System.err.println("Invoke, method (long) name: "+method.toGenericString());
+            for (Object arg : args) {
+                System.err.println("arg: " + arg);
+            }
             // FIXME: Return?
             
             String decl_class = method.getDeclaringClass().getCanonicalName();
@@ -47,14 +55,30 @@ public class InterfaceImplementor {
 
             if(decl_class.equals("java.lang.Object")) {
                 if (short_name.equals("toString")) {
-                    return "InterfaceImplementor["+interface_name+"]";
+                    return "InterfaceImplementor["+interface_name+"("+this_serial+")]";
+                //} else if (long_name.equals("public native int java.lang.Object.hashCode()")) {
+                //  return this.hashCode();
+                } else if(short_name.equals("equals")) {
+                    if(proxy.hashCode() == args[0].hashCode()) {
+                        System.err.println("returning: true");
+                        return true;
+                    }
+                    System.err.println("returning: false");
+                    return false;
                 } else {
                     // Just method.getName().equals("toString") ?
                     // Less junk over the wire please!
-                    return method.invoke(proxy, args);
+                    // Can't use this for equals as we're comparing proxy obj (the arg) to this (the invocation handler..)
+                    // there oughta be a saner way to default these!
+                    Object result = method.invoke(this, args);
+                    System.err.println("returning: "+result);
+                    return result;
+                    
+                    //throw new RuntimeException("Unhandled Object method on InterfaceImplementor["+interface_name+"]: "+long_name);
                 }
             }
-            
+
+            System.err.println("Calling:"+long_name);
             // These will always return null immediately / ignore returns, do we care?
             callback.run_extended(this, proxy, method_info, args);
             return null;

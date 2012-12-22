@@ -143,7 +143,7 @@ sub go_button_cb {
     my @ret;
     
     my $ok = eval {
-      local $SIG{INT} = sub {die "Caught SIGINT"};
+#      local $SIG{INT} = sub {die "Caught SIGINT"};
       @ret = $eval->eval($to_eval); 1;
     };
 

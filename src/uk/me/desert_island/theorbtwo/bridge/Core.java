@@ -299,6 +299,7 @@ public class Core {
         for (int i = start_index; i < incoming.length(); i++) {
             Object json_arg = incoming.get(i);
             err.print("JSON arg: " + json_arg.toString());
+
             if (json_arg instanceof JSONArray) {
                 ArrayList<Object> inner_args = new ArrayList<Object>();
                 ArrayList<Class>  inner_arg_types = new ArrayList<Class>(); 
@@ -456,6 +457,8 @@ public class Core {
             System.err.printf("Comparing method args, wanted=%s, got=%s\n", wanted_name, got_name);
             
             // Java Language Specification, 3rd edition, 5.3 -- method arguments can have...
+            // http://docs.oracle.com/javase/specs/jls/se7/html/jls-5.html#jls-5.3
+            //  Java language specification, java 7 edition, section 5.3
             // • an identity conversion (§5.1.1)
             if (check_identity_conversion(got_class, wanted_class)) {
                 System.err.printf("OK, identity conversion\n");
@@ -485,7 +488,12 @@ public class Core {
                 continue;
             }
 
-            // ...some strange additional things can happen here, in certian cases?  
+            // "If, after the conversions listed above have been applied, the resulting type is a
+            // raw type (§4.8), an unchecked conversion (§5.1.9) may then be applied."
+            // This seems to be about parametic types, which we've been ignoring so far, and shall continue to ignore.
+            
+            // The specification notes that implicit narrowing of integers is allowed in
+            // assignment contexts, but not in method call contexts.
             
             System.err.printf("Argument mismatch on wanted_name='%s' vs got_name='%s'\n", wanted_name, got_name);
             found = false;

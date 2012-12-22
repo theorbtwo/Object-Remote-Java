@@ -81,5 +81,13 @@
     -->
     <!-- version-tag: 1 -->
     <import file="${sdk.dir}/tools/ant/build.xml" />
-
+    <target name="jar">
+      <mkdir dir="bin/jar"/>
+      <jar destfile="bin/jar/Object-Remote-Java.jar" 
+           basedir="bin/classes">
+        <manifest>
+          <attribute name="Main-Class" value="Object-Remote-Java"/>
+        </manifest>
+      </jar>
+    </target>
 </project>

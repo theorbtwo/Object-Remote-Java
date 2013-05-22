@@ -80,7 +80,7 @@ public class InterfaceImplementor {
 
             System.err.println("Calling:"+long_name);
             // These will always return null immediately / ignore returns, do we care?
-            callback.run_extended(this, proxy, method_info, args);
+            callback.call_extended(this, proxy, method_info, args);
             return null;
         }
     }

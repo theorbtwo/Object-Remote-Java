@@ -15,11 +15,15 @@ import org.json.JSONException;
 import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 public class Core {
-
     private PrintStream out;
-    private PrintyThing err;
+    public PrintyThing err;
 
     public Core (PrintStream out_str, PrintyThing err_str) {
         out = out_str;
@@ -27,6 +31,9 @@ public class Core {
     }
 
     private HashMap<String, Object> known_objects = new HashMap<String, Object>();
+    private HashMap<String, Future> waiting_futures = new HashMap<String, Future>();
+
+    private ExecutorService executor = Executors.newFixedThreadPool(5);
 
     private Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
@@ -159,39 +166,49 @@ public class Core {
     public void handle_line(StringBuilder in_line) 
         throws JSONException, Exception
     {
-        JSONArray incoming = new JSONArray(in_line.toString());
-        String command = incoming.getString(0);
-        String future_objid = incoming.getString(1);
-        
-        Object retval;
-        Boolean is_fail;
+        final JSONArray incoming = new JSONArray(in_line.toString());
+        final String command = incoming.getString(0);
+        final String future_objid = incoming.getString(1);
         
         err.print("command_string = '"+command+"', future_objid = '"+future_objid+"'\n");
         
         if (command.equals("call")) {
-            try {
-                retval = handle_call(incoming, err);
-                is_fail = false;
-            } catch (Throwable e) {
-                is_fail = true;
-                // Good god, but this is ugly.
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-                if (e instanceof java.lang.reflect.InvocationTargetException) {
-                    e = e.getCause();
-                }
-
-                // FIXME: Framework (O::R) should do this?
-                e.printStackTrace();
-                e.printStackTrace(new PrintStream(baos));
-                retval = e.toString() + " message " + e.getMessage() + " stack trace: " + baos.toString();
-            }
-        } else {
+            executor.execute(new Runnable() {
+                    public void run() {
+                        Object retval;
+                        Boolean is_fail;
+        
+                        try {
+                            retval = handle_call(incoming, err);
+                            is_fail = false;
+                        } catch (Throwable e) {
+                            is_fail = true;
+                            // Good god, but this is ugly.
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            
+                            if (e instanceof java.lang.reflect.InvocationTargetException) {
+                                e = e.getCause();
+                            }
+                            
+                            // FIXME: Framework (O::R) should do this?
+                            e.printStackTrace();
+                            e.printStackTrace(new PrintStream(baos));
+                            retval = e.toString() + " message " + e.getMessage() + " stack trace: " + baos.toString();
+                        }
+                        
+                        send_result(is_fail, future_objid, retval);
+                    } /*run*/
+                } /* runnable inline subclass */
+                ); /* executor.execute() */
+        } /* if command = call */
+        else {
             err.print("Huh?\n");
             err.print("command: "+ command + "\n");
             throw(new Exception("Protocol error?"));
         }
+    }
 
+    public synchronized void send_result(Boolean is_fail, String future_objid, Object retval)  {
         JSONArray json_out = new JSONArray();
         json_out.put("call_free");
         json_out.put("NULL");
@@ -209,12 +226,17 @@ public class Core {
             err.print("Return (class):    " + retval.getClass().toString() + "\n");
         }
 
-        json_out.put(convert_java_args_to_json(retval));
+        // FIXME: put this out to the user, instead of the catlog?
+        try {
+            json_out.put(convert_java_args_to_json(retval));
+        } catch (JSONException e) {
+            err.print("Error trying to convert_java_args_to_json: "+e);
+        }
 
         out.println(json_out.toString());
     }
 
-    public void run_remote_code(String remote_code_id, Object... args) {
+    public Future run_remote_code(Boolean wait, String remote_code_id, Object... args) {
         System.err.println("Trying to run remote code "+remote_code_id);
 
         // Now we need to construct a "call remote code" line to throw at the other side:
@@ -238,8 +260,19 @@ public class Core {
                 }
             }
         }
-
+        
+        Future future = null;
+        if (wait) {
+            future = new NullFuture();
+            this.waiting_futures.put(my_id, future);
+        }
         out.println(code_request.toString());
+
+        return future;
+    }
+
+    public void run_remote_code(String remote_code_id, Object... args) {
+        run_remote_code(false, remote_code_id, args);
     }
 
     private Object convert_java_args_to_json(Object input) 
@@ -328,7 +361,7 @@ public class Core {
     }
 
     
-    private static Class<?> my_find_class(String perl_name) throws ClassNotFoundException {
+    protected static Class<?> my_find_class(String perl_name) throws ClassNotFoundException {
         String java_name;
 
         if (perl_name.startsWith("Object::Remote::Java::")) {
@@ -503,7 +536,7 @@ public class Core {
         return found;
     }
     
-    private static Constructor my_find_constructor(Class<?> klass, Class<?>[] args)
+    protected static Constructor my_find_constructor(Class<?> klass, Class<?>[] args)
         throws SecurityException, NoSuchMethodException
     {
         System.err.printf("my_find_constructor, class = ", klass.getName(), ", args = ...");
@@ -596,7 +629,7 @@ public class Core {
 
 
 
-    private static String obj_ident(java.lang.Object obj) {
+    protected static String obj_ident(java.lang.Object obj) {
         StringBuilder ret = new StringBuilder();
         if (obj == null) {
             return "null";

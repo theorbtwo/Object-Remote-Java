@@ -1,6 +1,9 @@
 package uk.me.desert_island.theorbtwo.bridge;
 
-public class PassthroughRunnable implements Runnable {
+import java.util.concurrent.Future;
+import java.util.concurrent.Callable;
+
+public class PassthroughRunnable implements Runnable, Callable<Object> {
     private String code_id;
     private Core core;
 
@@ -11,10 +14,26 @@ public class PassthroughRunnable implements Runnable {
 
     public void run_extended(Object... args) {
         // FIXME: figure out how to make this return something useful?
-        core.run_remote_code(code_id, args);
+        core.run_remote_code(false, code_id, args);
     }
 
     public void run() {
-        core.run_remote_code(code_id);
+        run_extended();
+    }
+
+    public Object call_extended(Object... args) {
+        Future future = core.run_remote_code(true, code_id, args);
+        
+        try {
+            return future.get();
+        } catch (Exception e) {
+            core.err.print("Exception during call_extended: "+e);
+            return null;
+        }
+
+    }
+    
+    public Object call() {
+        return call_extended();
     }
 }

@@ -201,7 +201,10 @@ public class Core {
                 } /* runnable inline subclass */
                 ); /* executor.execute() */
         } /* if command = call */
-        else {
+        else if (command.equals("call_free")) {
+            /* ["call_free", "NULL", "org.json.JSONArray:somestuff", "done"] */
+            
+        } else {
             err.print("Huh?\n");
             err.print("command: "+ command + "\n");
             throw(new Exception("Protocol error?"));
@@ -232,7 +235,7 @@ public class Core {
         } catch (JSONException e) {
             err.print("Error trying to convert_java_args_to_json: "+e);
         }
-
+        err.print("Send line to client: " + json_out.toString());
         out.println(json_out.toString());
     }
 
@@ -266,6 +269,7 @@ public class Core {
             future = new NullFuture();
             this.waiting_futures.put(my_id, future);
         }
+        err.print("Sending: "+code_request.toString()+"\n");
         out.println(code_request.toString());
 
         return future;

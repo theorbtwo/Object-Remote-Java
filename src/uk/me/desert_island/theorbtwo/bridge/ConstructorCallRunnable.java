@@ -8,6 +8,8 @@ public class ConstructorCallRunnable implements Runnable {
     private Class klass;
     private Object[] args;
     private Constructor constr;
+
+    public volatile Object constructed = null;
     
     public ConstructorCallRunnable(String perl_class, Object... a_args) 
         throws NoSuchMethodException, ClassNotFoundException
@@ -27,13 +29,16 @@ public class ConstructorCallRunnable implements Runnable {
     public void run() 
     {
         try {
-            Object retval = constr.newInstance(args);
-            Core.send_result(true, Core.obj_ident(retval), retval);
+            constructed = constr.newInstance(args);
         } catch (IllegalAccessException e) {
             // HELP ME, WHAT CAN I DO HERE?
         } catch (InvocationTargetException e) {
             // HELP ME, WHAT CAN I DO HERE?
         } catch (InstantiationException e) {
         }
+    }
+
+    public Object getResult() {
+        return constructed;
     }
 }

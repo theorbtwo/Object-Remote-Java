@@ -80,8 +80,39 @@ public class InterfaceImplementor {
 
             System.err.println("Calling:"+long_name);
             // These will always return null immediately / ignore returns, do we care?
-            callback.call_extended(this, proxy, method_info, args);
-            return null;
+            Object result = callback.call_extended(this, proxy, method_info, args);
+
+            if (result == null) {
+                return null;
+            }
+
+            Class<?> wanted_result_type = method.getReturnType();
+            Class<?> got_result_type = result.getClass();
+
+            System.err.println("Result class, wanted = "+wanted_result_type+" got = "+got_result_type);
+
+            if(wanted_result_type.equals(Boolean.TYPE) && got_result_type.equals(Integer.class)) {
+                System.err.println("Trying to convert Integer to boolean " + result);
+                if((Integer)result == 0) {
+                    result = false;
+                } else {
+                    result = true;
+                }
+            }
+
+            for (Class<?> almost_primitive : new Class[] {Boolean.class, Character.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class}) {
+                // While all of these have a TYPE, Class does not, and there's no closer subclass, so Java fights me.
+                Class<?> primitive = (Class)(almost_primitive.getField("TYPE").get(null));
+                if (wanted_result_type.equals(primitive) && got_result_type.equals(String.class)) {
+                    System.err.println("Coercing String "+result+"to "+almost_primitive);
+                    /* Hopefully, passing an Integer to something wanting an int is close enough -- it should be... */
+                    // Similarly, while all of these have a constructor that takes a single string (I think), Java doesn't know that.
+                    result = almost_primitive.getConstructor(String.class).newInstance((String)result);
+                }
+            }
+
+            System.err.println("Call to "+long_name+" returned "+result);
+            return result;
         }
     }
 }

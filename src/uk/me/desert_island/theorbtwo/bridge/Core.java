@@ -31,19 +31,22 @@ public class Core {
     }
 
     private HashMap<String, Object> known_objects = new HashMap<String, Object>();
-    private HashMap<String, Future> waiting_futures = new HashMap<String, Future>();
+    private HashMap<String, NullFuture> waiting_futures = new HashMap<String, NullFuture>();
 
     private ExecutorService executor = Executors.newFixedThreadPool(5);
 
     private Object handle_call(JSONArray incoming, PrintyThing err) 
         throws JSONException, Exception
     {
-        //  0      1          2                    3 4      5                                          6     7
-        // ["call","31247544","class_call_handler",0,"call","Object::Remote::Java::java::lang::System","can","getProperties"]
+        //  0           1          2                             3      4      5                                          6     7
+        // ["call",     "31247544","class_call_handler",         0,     "call","Object::Remote::Java::java::lang::System","can","getProperties"]
+        // ["call_free","NULL",    "org.json.JSONArray:4113b6c8","fail","TEST: EXCEPTION IN getCount! at /mnt/sdcard/uk.me.jandj.runPerl/lib/ShopTrack/UserAdapter.pm line 18.\n"]
 
         String call_type = incoming.getString(2);
         
         if (call_type.equals("class_call_handler")) {
+            //  0           1          2                             3      4      5                                          6     7
+            // ["call",     "31247544","class_call_handler",         0,     "call","Object::Remote::Java::java::lang::System","can","getProperties"]
             // wantarray may be undef/0/1, so call it an Object, not an int or a string.
             //Object wantarray = incoming.get(3);
             String call_type_again = incoming.getString(4);
@@ -80,6 +83,27 @@ public class Core {
             } else {
                 err.print("Huh?\n");
                 err.print("call_type_again: '" + call_type_again +"'\n");
+            }
+        } else if (waiting_futures.containsKey(call_type)) {
+            NullFuture future = waiting_futures.get(call_type);
+
+            //  0           1          2                             3      4
+            // ["call_free","NULL",    "org.json.JSONArray:4113b6c8","fail","TEST: EXCEPTION IN getCount! at /mnt/sdcard/uk.me.jandj.runPerl/lib/ShopTrack/UserAdapter.pm line 18.\n"]
+            
+            String mumble = incoming.getString(3);
+            Boolean is_fail = mumble.equals("fail");
+
+            if (!is_fail) {
+                ArrayList<Object> args = new ArrayList<Object>();
+                ArrayList<Class> arg_types = new ArrayList<Class>();
+                convert_json_args_to_java(incoming, 4, arg_types, args, err);
+                
+                future.setAndDone(args.get(0));
+            } else {
+                // failure
+                Exception exception = new Exception(incoming.getString(4));
+
+                future.setAndFailed(exception);
             }
         } else if (known_objects.containsKey(call_type)) {
             // A normal method call.
@@ -162,7 +186,38 @@ public class Core {
 
         return null;
     }
-    
+
+    public Runnable get_call_runnable(final JSONArray incoming, final Boolean needs_result, final PrintyThing err, final String future_objid) {
+        Runnable caller = new Runnable() {
+                public void run() {
+                    Object retval;
+                    Boolean is_fail;
+                    
+                    try {
+                        retval = handle_call(incoming, err);
+                        is_fail = false;
+                    } catch (Throwable e) {
+                        is_fail = true;
+                        // Good god, but this is ugly.
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        
+                        if (e instanceof java.lang.reflect.InvocationTargetException) {
+                            e = e.getCause();
+                        }
+                        
+                        // FIXME: Framework (O::R) should do this?
+                        e.printStackTrace();
+                        e.printStackTrace(new PrintStream(baos));
+                        retval = e.toString() + " message " + e.getMessage() + " stack trace: " + baos.toString();
+                    }
+                    if(needs_result) {
+                        send_result(is_fail, future_objid, retval);
+                    }
+                } /*run*/
+            };
+            return caller;
+    }
+
     public void handle_line(StringBuilder in_line) 
         throws JSONException, Exception
     {
@@ -173,37 +228,16 @@ public class Core {
         err.print("command_string = '"+command+"', future_objid = '"+future_objid+"'\n");
         
         if (command.equals("call")) {
-            executor.execute(new Runnable() {
-                    public void run() {
-                        Object retval;
-                        Boolean is_fail;
-        
-                        try {
-                            retval = handle_call(incoming, err);
-                            is_fail = false;
-                        } catch (Throwable e) {
-                            is_fail = true;
-                            // Good god, but this is ugly.
-                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                            
-                            if (e instanceof java.lang.reflect.InvocationTargetException) {
-                                e = e.getCause();
-                            }
-                            
-                            // FIXME: Framework (O::R) should do this?
-                            e.printStackTrace();
-                            e.printStackTrace(new PrintStream(baos));
-                            retval = e.toString() + " message " + e.getMessage() + " stack trace: " + baos.toString();
-                        }
-                        
-                        send_result(is_fail, future_objid, retval);
-                    } /*run*/
-                } /* runnable inline subclass */
-                ); /* executor.execute() */
+            executor.execute(get_call_runnable(incoming, true, err, future_objid));
         } /* if command = call */
         else if (command.equals("call_free")) {
-            /* ["call_free", "NULL", "org.json.JSONArray:somestuff", "done"] */
-            
+            /* ["call_free", "NULL", "org.json.JSONArray:somestuff", "done", 1] */
+            executor.execute(get_call_runnable(incoming, false, err, null));
+            // waiting_futures.remove(incoming.getString(2));
+        }
+        else if (command.equals("free")) {
+            /* ["free", "org.json.JSONArray:somestuff"] */
+            known_objects.remove(incoming.getString(1));            
         } else {
             err.print("Huh?\n");
             err.print("command: "+ command + "\n");
@@ -250,7 +284,13 @@ public class Core {
         code_request.put("call");
         code_request.put(my_id);
         code_request.put(remote_code_id);
-        code_request.put(JSONObject.NULL);
+        if (wait) {
+            // scalar context, since java has no list context.
+            code_request.put(0);
+        } else {
+            // void context
+            code_request.put(JSONObject.NULL);
+        }
         code_request.put("call");
 
         if (args.length > 0) {
@@ -264,9 +304,10 @@ public class Core {
             }
         }
         
-        Future future = null;
+        NullFuture future = null;
         if (wait) {
             future = new NullFuture();
+            err.print("Stuffing " +my_id + " in waiting_futures");
             this.waiting_futures.put(my_id, future);
         }
         err.print("Sending: "+code_request.toString()+"\n");
@@ -312,13 +353,18 @@ public class Core {
         } else if (input.getClass() == Long.class) {
             return ((Long)input).longValue();
         } else if (input.getClass() == Boolean.class) {
-            // Use perl conventions for these
+            // Instead of outputing these as just another object, or trying to make it more perlish (which is what we did initally), just pass them on to org.json, and
+            // hope that Does The Right Thing.
             if ((Boolean)input) {
-                return 1;
+                // return 1; -- attempt to be perlish
+                return true;
             } else {
                 // This probably won't have the special semantics of the one true false value, which is "" in string context and 0 in numeric context, all without warning.
-                return JSONObject.NULL;
+                // return JSONObject.NULL; -- attempt to be perlish
+                return false;
             }
+        } else if(input.getClass() == JSONObject.class) {
+            return input;
         } else {
             JSONObject return_json = new JSONObject();
             String ret_objid = obj_ident(input);
@@ -355,12 +401,18 @@ public class Core {
                     //final Core the_core = this;
                     json_arg = new PassthroughRunnable(code_id, this);
                 } else {
-                    err.print("WTF: JSOObject is not a local_object or a remote_code? "+json_arg_obj.toString());
+                    err.print("Huh, JSONObject is not a local_object or a remote_code? "+json_arg_obj.toString()+ " Continuing blithely on.. ");
                 }
+            } else if (json_arg == JSONObject.NULL) {
+                json_arg = null;
             }
 
             args.add(json_arg);
-            arg_types.add(json_arg.getClass());
+            if (json_arg == null) {
+                arg_types.add(null);
+            } else {
+                arg_types.add(json_arg.getClass());
+            }
         }
     }
 
@@ -489,13 +541,25 @@ public class Core {
             Class got_class = args[i];
 
             String wanted_name = wanted_class.getName();
-            String got_name = got_class.getName();
+            String got_name = got_class != null ? got_class.getName() : "null";
 
             System.err.printf("Comparing method args, wanted=%s, got=%s\n", wanted_name, got_name);
             
+
+            // A value of the null type (the null reference is the
+            // only such value) may be converted to any reference
+            // type. (the spec puts this last, but we do it early, so
+            // we can not worry about nulls later.
+            if (got_class == null) {
+                System.err.printf("OK, null -> anything\n");
+                continue;
+            }
+            
+
             // Java Language Specification, 3rd edition, 5.3 -- method arguments can have...
             // http://docs.oracle.com/javase/specs/jls/se7/html/jls-5.html#jls-5.3
             //  Java language specification, java 7 edition, section 5.3
+
             // • an identity conversion (§5.1.1)
             if (check_identity_conversion(got_class, wanted_class)) {
                 System.err.printf("OK, identity conversion\n");
@@ -585,14 +649,68 @@ public class Core {
         throw new NoSuchMethodException("Cannot find constructor on class "+klass.getName()+" with arguments "+arguments_string);
     }
     
-    public static Method my_find_method(Class<?> klass, String name, Class<?>[] args) 
+    public static Method my_find_method_new(Class<?> klass, String name, Object[] input_args) 
+        throws SecurityException, NoSuchMethodException
+    {
+        Class<?>[] input_arg_types = new Class<?>[input_args.length];
+        
+        for (int i = 0; i < input_args.length; i++) {
+            input_arg_types[i] = input_args.getClass();
+        }
+
+        try {
+            return my_find_method(klass, name, input_arg_types);
+        } catch (NoSuchMethodException e) {
+            // Ignore it.
+        }
+
+        /*
+
+        // If we're still here, it means my_find_method_strict didn't work.
+        System.err.printf("Trying to fit round pegs into square holes\n");
+
+        // We do not have a perfect match; try for a match where the
+        // method has primitive types but arg_types has corresponding boxed types.
+        for (Method m : klass.getMethods()) {
+            Class<?>[] m_arg_types;
+
+            if (!m.getName().equals(name)) {
+                continue;
+            }
+
+            m_arg_types = m.getParameterTypes();
+
+            if (m_arg_types.length != arg_types.length) {
+                continue;
+            }
+
+            System.err.printf("We have a strong canidate %s\n", m.toString());
+
+            if (compare_method_args(arg_types, m_arg_types)) {
+                System.err.printf("We got it: %s\n", m.toString());
+                return m;
+            }
+        }
+
+        */
+
+        String arguments_string = "";
+        for (Class<?> arg_class : input_arg_types) {
+            arguments_string += arg_class.getName() + ", ";
+        }
+
+        
+        throw new NoSuchMethodException("Cannot find method named "+name+" on class "+klass.getName()+" with arguments "+arguments_string);
+    }
+
+    public static Method my_find_method(Class<?> klass, String name, Class<?>[] arg_types) 
         throws SecurityException, NoSuchMethodException
     {
     
         try {
             Method m;
             System.err.printf("Trying to find an obvious method for name=%s\n", name);
-            m = klass.getMethod(name, args);
+            m = klass.getMethod(name, arg_types);
             System.err.printf("Still here after getMethod() call\n");
             return m;
         } catch (NoSuchMethodException e) {
@@ -601,30 +719,30 @@ public class Core {
 
         System.err.printf("Trying non-obvious matches\n");
         // We do not have a perfect match; try for a match where the
-        // method has primitive types but args has corresponding boxed types.
+        // method has primitive types but arg_types has corresponding boxed types.
         for (Method m : klass.getMethods()) {
-            Class<?>[] m_args;
+            Class<?>[] m_arg_types;
 
             if (!m.getName().equals(name)) {
                 continue;
             }
 
-            m_args = m.getParameterTypes();
+            m_arg_types = m.getParameterTypes();
 
-            if (m_args.length != args.length) {
+            if (m_arg_types.length != arg_types.length) {
                 continue;
             }
 
             System.err.printf("We have a strong canidate %s\n", m.toString());
 
-            if (compare_method_args(args, m_args)) {
+            if (compare_method_args(arg_types, m_arg_types)) {
                 System.err.printf("We got it: %s\n", m.toString());
                 return m;
             }
         }
 
         String arguments_string = "";
-        for (Class<?> arg_class : args) {
+        for (Class<?> arg_class : arg_types) {
             arguments_string += arg_class.getName() + ", ";
         }
 

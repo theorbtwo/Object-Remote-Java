@@ -116,7 +116,7 @@ public class JavaBridgeActivity extends Activity
 
     
     @Override
-        public void onStart() {
+        protected void onStart() {
         super.onStart();
     }
 }

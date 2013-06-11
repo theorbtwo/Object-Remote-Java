@@ -18,5 +18,7 @@ class NullFuture extends FutureTask<Object> {
         this.done();
     }
     
-    
+    public void setAndFailed(Throwable throwable) {
+        this.setException(throwable);
+    }
 }

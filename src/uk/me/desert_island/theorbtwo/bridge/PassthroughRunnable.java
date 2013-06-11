@@ -3,7 +3,9 @@ package uk.me.desert_island.theorbtwo.bridge;
 import java.util.concurrent.Future;
 import java.util.concurrent.Callable;
 
-public class PassthroughRunnable implements Runnable, Callable<Object> {
+/* We *almost* implement Callable<Object>, except our call() can throw things. */
+
+public class PassthroughRunnable implements Runnable /*, Callable<Object> */ {
     private String code_id;
     private Core core;
 
@@ -21,19 +23,15 @@ public class PassthroughRunnable implements Runnable, Callable<Object> {
         run_extended();
     }
 
-    public Object call_extended(Object... args) {
+    public Object call_extended(Object... args) 
+        throws InterruptedException, java.util.concurrent.ExecutionException
+    {
         Future future = core.run_remote_code(true, code_id, args);
         
-        try {
-            return future.get();
-        } catch (Exception e) {
-            core.err.print("Exception during call_extended: "+e);
-            return null;
-        }
-
+        return future.get();
     }
     
-    public Object call() {
+    public Object call() throws InterruptedException, java.util.concurrent.ExecutionException {
         return call_extended();
     }
 }

@@ -6,6 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
+import android.view.Menu;
+import android.view.MenuItem;
+import java.lang.Boolean;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -84,6 +87,44 @@ public class JavaBridgeActivity extends Activity
 
     public void setEventCallbacks(HashMap new_callbacks) {
         event_callbacks = new_callbacks;
+    }
+
+    /* Called when the activity is set up to add items to the menu(s)
+     * OptionsMenu, or ActionBar
+     */
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        Log.w(LOGTAG, "onCreateOptionsMenu happened!");
+        Boolean done = false;
+        if(event_callbacks.get("on_create_options_menu") != null) {
+            try {
+                done = (Boolean)((PassthroughRunnable)event_callbacks.get("on_create_options_menu")).call_extended(menu);
+            } catch(Exception e) {
+            }
+        }
+        if(done) {
+            return true;
+        }
+        return super.onCreateOptionsMenu(menu);      
+    }
+
+    /* Called when an optionsmenu or actionbar item is clicked by the user
+     * return a true value to indicate the item was handled.
+     */
+    @Override
+    public boolean onOptionsItemSelected(MenuItem menuitem) {
+        Log.w(LOGTAG, "onOptionsItemSelected happened!");
+        Boolean done = false;
+        if(event_callbacks.get("on_options_item_selected") != null) {
+            try {
+                done = (Boolean)((PassthroughRunnable)event_callbacks.get("on_options_item_selected")).call_extended(menuitem);
+            } catch (Exception e) {
+            }
+        }
+        if(done) {
+            return true;
+        }
+        return super.onOptionsItemSelected(menuitem);
     }
 
     /* Called when the device's configuration changes, such as the
